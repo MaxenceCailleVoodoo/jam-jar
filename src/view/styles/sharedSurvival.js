@@ -30,6 +30,22 @@ export function setupMovementInput(scene) {
     D: Phaser.Input.Keyboard.KeyCodes.D,
   });
   scene.spaceKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+  scene.restartKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
+  scene._spaceHeld = false;
+  scene._restartHeld = false;
+}
+
+/** Front montant fiable (évite les soucis avec JustDown / addCapture). */
+export function consumeKeyPress(scene, key, heldFlag) {
+  const down = key?.isDown ?? false;
+  const pressed = down && !scene[heldFlag];
+  scene[heldFlag] = down;
+  return pressed;
+}
+
+export function isSpacePressed(scene) {
+  const down = scene.spaceKey?.isDown || scene.cursors?.space?.isDown;
+  return consumeKeyPress(scene, { isDown: down }, '_spaceHeld');
 }
 
 export function readMovementInput(scene) {
@@ -176,6 +192,8 @@ const JAM_EXPLOSION_FALLBACK_MS = 3200;
 /** Pause la BGM, joue l'explosion confiture, puis remet la BGM. */
 export function playJamExplosion(scene) {
   const sm = scene.sound;
+  if (!sm) return;
+
   const bgm = sm.get('bgm');
 
   if (bgm && bgm.getData('jamExplosionActive') !== true) {
@@ -185,8 +203,11 @@ export function playJamExplosion(scene) {
     if (bgm.isPlaying) bgm.pause();
   }
 
+  if (!scene.cache?.audio?.exists('jam-explosion')) return;
+
   let sfx = sm.get('jam-explosion');
   if (!sfx) sfx = sm.add('jam-explosion', { volume: JAM_EXPLOSION_VOLUME });
+  if (!sfx) return;
   if (sfx.isPlaying) sfx.stop();
 
   let restored = false;
@@ -207,5 +228,9 @@ export function playJamExplosion(scene) {
 
   sfx.once('complete', restoreBgm);
   scene.time.delayedCall(JAM_EXPLOSION_FALLBACK_MS, restoreBgm);
-  sfx.play();
+  try {
+    sfx.play();
+  } catch {
+    restoreBgm();
+  }
 }
