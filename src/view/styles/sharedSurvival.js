@@ -112,6 +112,26 @@ export function killAllEnemies(scene, fromX, fromY) {
   return killed;
 }
 
+/** Tue les ennemis avec un léger décalage (effet cinématique). */
+export function killEnemiesStaggered(scene, enemies, fromX, fromY, stepMs = 45) {
+  let i = 0;
+  let killed = 0;
+  for (const e of enemies) {
+    if (!e?.active) continue;
+    killed += 1;
+    const delay = i * stepMs;
+    i += 1;
+    if (delay <= 0) {
+      scene.killEnemy(e, fromX, fromY);
+    } else {
+      scene.time.delayedCall(delay, () => {
+        if (e?.active) scene.killEnemy(e, fromX, fromY);
+      });
+    }
+  }
+  return killed;
+}
+
 export const QUIPS_JUICY = [
   'YOU GET TOASTED',
   'BREAD AND BURIED',

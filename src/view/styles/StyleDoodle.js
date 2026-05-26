@@ -8,7 +8,7 @@ import {
   ARENA, SURVIVAL,
   setupMovementInput, readMovementInput, chasePlayer, randomEdgeSpawn,
   scoreForCombo, comboTier, enemySpeedFor, spawnIntervalFor,
-  killAllEnemies,
+  killEnemiesInRadius, killEnemiesStaggered,
   QUIPS_DOODLE, QUIPS_DEATH, pickQuip,
 } from './sharedSurvival.js';
 
@@ -29,7 +29,12 @@ const PALETTE = {
   uiAccent: '#cc2244',
 };
 
-const ATTACK_COOLDOWN_MS = 7500;
+const CHARGE_FULL_MS = 6500;
+const CHARGE_DRAIN_MS = 650;
+const CHARGE_MIN_RADIUS = 120;
+const CHARGE_MAX_RADIUS = 520;
+const SLOWMO_DURATION_MS = 600;
+const SLOWMO_TIME_SCALE = 0.18;
 
 function makeCanvas(w, h) {
   const c = document.createElement('canvas');
@@ -182,11 +187,18 @@ function drawToastFrame(W, H, seed) {
   ctx.ellipse(W / 2, H * 0.93, W * 0.33, H * 0.04, 0, 0, Math.PI * 2);
   ctx.fill();
 
+  // Silhouette plus \"pain de mie\" : haut bombé + base plate.
   const pts = [
-    [W * 0.16, H * 0.18], [W * 0.16, H * 0.5],
-    [W * 0.18, H * 0.82], [W * 0.5, H * 0.86],
-    [W * 0.82, H * 0.82], [W * 0.84, H * 0.5],
-    [W * 0.84, H * 0.18], [W * 0.5, H * 0.14],
+    [W * 0.22, H * 0.22],
+    [W * 0.22, H * 0.55],
+    [W * 0.24, H * 0.82],
+    [W * 0.5, H * 0.86],
+    [W * 0.76, H * 0.82],
+    [W * 0.78, H * 0.55],
+    [W * 0.78, H * 0.22],
+    [W * 0.64, H * 0.12],
+    [W * 0.5, H * 0.1],
+    [W * 0.36, H * 0.12],
   ];
 
   ctx.save();
@@ -203,6 +215,16 @@ function drawToastFrame(W, H, seed) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   wobblyPath(ctx, pts, 5, rand, true);
+  ctx.stroke();
+  ctx.restore();
+
+  // Crust \"croûte\" : ligne plus foncée à l'extérieur.
+  ctx.save();
+  ctx.strokeStyle = PALETTE.crust;
+  ctx.globalAlpha = 0.55;
+  ctx.lineWidth = 6;
+  ctx.lineJoin = 'round';
+  wobblyPath(ctx, pts, 3.5, rand, true);
   ctx.stroke();
   ctx.restore();
 
@@ -324,7 +346,8 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.invincibleUntil = 0;
     this.alive = true;
     this.startTime = this.time.now;
-    this.lastAttackAt = -ATTACK_COOLDOWN_MS;
+    this.charge = 0; // 0..1
+    this.isExploding = false;
 
     this.player = this.physics.add.sprite(ARENA.width / 2, ARENA.height / 2, this.jarAnim.firstKey);
     this.player.play(this.jarAnim.animKey);
@@ -368,12 +391,13 @@ export class StyleDoodleScene extends Phaser.Scene {
       fontSize: '22px', fontStyle: 'bold', color: PALETTE.uiText,
     }).setOrigin(1, 0).setDepth(100);
 
-    this.attackHint = this.add.text(ARENA.width - 28, 50, 'globale', {
+    this.attackHint = this.add.text(ARENA.width - 28, 50, 'charge → rayon / full wipe', {
       fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
       fontSize: '14px', color: PALETTE.uiText,
     }).setOrigin(1, 0).setDepth(100);
 
     this.cdBar = this.add.graphics().setDepth(100);
+    this.chargeRing = this.add.graphics().setDepth(19);
 
     this.hudCombo = this.add.text(ARENA.width / 2, ARENA.height * 0.22, '', {
       fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
@@ -406,16 +430,20 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.enemySpawnEvent.delay = spawnIntervalFor(this.time.now - this.startTime);
   }
 
-  tryAttack() {
-    if (!this.alive) return;
-    const elapsed = this.time.now - this.lastAttackAt;
-    if (elapsed < ATTACK_COOLDOWN_MS) return;
-    this.lastAttackAt = this.time.now;
-    this.doGlobalSplat();
+  tryExplode() {
+    if (!this.alive || this.isExploding) return;
+    if (this.charge <= 0.06) return;
+    this.doChargedExplosion();
   }
 
-  doGlobalSplat() {
+  doChargedExplosion() {
+    this.isExploding = true;
+
     const jx = this.player.x; const jy = this.player.y;
+    const isFull = this.charge >= 0.999;
+    const radius = isFull
+      ? Math.max(ARENA.width, ARENA.height)
+      : (CHARGE_MIN_RADIUS + (CHARGE_MAX_RADIUS - CHARGE_MIN_RADIUS) * this.charge);
 
     this.tweens.add({
       targets: this.player,
@@ -431,7 +459,7 @@ export class StyleDoodleScene extends Phaser.Scene {
       quantity: 36,
       emitting: false,
     }).setDepth(50);
-    splat1.explode(70);
+    splat1.explode(isFull ? 90 : 70);
 
     const splat2 = this.add.particles(jx, jy, `${KEY}-jam-light`, {
       speed: { min: 180, max: 520 },
@@ -441,11 +469,11 @@ export class StyleDoodleScene extends Phaser.Scene {
       quantity: 20,
       emitting: false,
     }).setDepth(51);
-    splat2.explode(36);
+    splat2.explode(isFull ? 50 : 36);
 
     this.time.delayedCall(1200, () => { splat1.destroy(); splat2.destroy(); });
 
-    const wave = this.add.circle(jx, jy, Math.max(ARENA.width, ARENA.height), 0xcc2244, 0.45)
+    const wave = this.add.circle(jx, jy, radius, 0xcc2244, isFull ? 0.5 : 0.35)
       .setDepth(48).setScale(0.05);
     this.tweens.add({
       targets: wave, scale: 1.1, alpha: 0,
@@ -453,17 +481,46 @@ export class StyleDoodleScene extends Phaser.Scene {
       onComplete: () => wave.destroy(),
     });
 
-    this.cameras.main.shake(280, 0.014);
+    // Slow-motion cinématique : on voit les tartines se faire toucher.
+    this.cameras.main.shake(220, 0.012);
     this.cameras.main.flash(120, 255, 200, 200);
+    this.time.timeScale = SLOWMO_TIME_SCALE;
+    this.tweens.timeScale = SLOWMO_TIME_SCALE;
+    this.physics.world.timeScale = SLOWMO_TIME_SCALE;
 
-    const killed = killAllEnemies(this, jx, jy);
+    this.time.delayedCall(SLOWMO_DURATION_MS, () => {
+      this.time.timeScale = 1;
+      this.tweens.timeScale = 1;
+      this.physics.world.timeScale = 1;
+    });
+
+    const victims = [];
+    if (isFull) {
+      this.enemies.children.iterate((e) => { if (e?.active) victims.push(e); });
+    } else {
+      this.enemies.children.iterate((e) => {
+        if (!e?.active) return;
+        const d = Math.hypot(e.x - jx, e.y - jy);
+        if (d <= radius) victims.push(e);
+      });
+    }
+    // Décalage pour bien voir la vague atteindre les ennemis.
+    const killed = killEnemiesStaggered(this, victims, jx, jy, 55);
+
     if (killed > 0) {
       const pts = scoreForCombo(killed);
       this.score += pts;
       this.hudScore.setText(`${this.score}`);
       this.showCombo(killed, pts);
     }
-    this.popBigText(jx, jy - 50, killed > 0 ? 'SPLAT!' : 'POUF');
+
+    const label = isFull ? 'BOOM!' : 'SPLAT!';
+    this.popBigText(jx, jy - 50, killed > 0 ? label : 'POUF');
+
+    // Drain charge après explosion.
+    const drainStart = this.charge;
+    this.charge = 0;
+    this.time.delayedCall(CHARGE_DRAIN_MS, () => { void drainStart; this.isExploding = false; });
   }
 
   killEnemy(e, fromX, fromY) {
@@ -588,8 +645,7 @@ export class StyleDoodleScene extends Phaser.Scene {
   }
 
   updateCooldown() {
-    const elapsed = this.time.now - this.lastAttackAt;
-    const ratio = Math.min(1, elapsed / ATTACK_COOLDOWN_MS);
+    const ratio = this.charge;
     this.cdBar.clear();
     const x = ARENA.width - 28 - 180;
     const y = 78;
@@ -603,15 +659,40 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.cdBar.strokeRoundedRect(x, y, w, h, 4);
   }
 
+  updateChargeRing() {
+    this.chargeRing.clear();
+    if (!this.alive) return;
+    const ratio = Phaser.Math.Clamp(this.charge, 0, 1);
+    const r = 60;
+    this.chargeRing.lineStyle(6, 0x1a1410, 0.18);
+    this.chargeRing.strokeCircle(this.player.x, this.player.y, r);
+    this.chargeRing.lineStyle(6, 0xcc2244, ratio >= 1 ? 0.95 : 0.75);
+    this.chargeRing.beginPath();
+    this.chargeRing.arc(
+      this.player.x, this.player.y, r,
+      Phaser.Math.DegToRad(-90),
+      Phaser.Math.DegToRad(-90 + 360 * ratio),
+      false,
+    );
+    this.chargeRing.strokePath();
+  }
+
   update() {
     if (!this.alive) return;
+
+    // Charge progressive (0..1). Plus lente si on est déjà presque au max.
+    if (!this.isExploding) {
+      const dt = this.game.loop.delta ?? 16.6;
+      this.charge = Math.min(1, this.charge + dt / CHARGE_FULL_MS);
+    }
 
     const { vx, vy } = readMovementInput(this);
     const speed = 230;
     this.player.body.setVelocity(vx * speed, vy * speed);
 
-    if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) this.tryAttack();
+    if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) this.tryExplode();
     this.updateCooldown();
+    this.updateChargeRing();
 
     const speedNow = enemySpeedFor(this.time.now - this.startTime);
     this.enemies.children.iterate((e) => {
