@@ -1,54 +1,59 @@
-export const ARENA = { half: 22, y: 0 };
+export const GAME_WIDTH = 1280;
+export const GAME_HEIGHT = 720;
 
 export const PLAYER = {
-  speed: 14,
-  radius: 1.2,
+  speed: 240,
+  radius: 22,
   lives: 3,
   invincibleMs: 1200,
   fireRateMs: 180,
-  bulletSpeed: 38,
-  bulletRadius: 0.35,
+  bulletSpeed: 520,
+  bulletRadius: 8,
 };
 
-export const ZOMBIE = {
-  baseRadius: 1,
-  baseSpeed: 5.5,
+export const BREAD = {
+  baseRadius: 18,
+  baseSpeed: 85,
   baseHp: 1,
+  scoreValue: 100,
 };
 
-export const BOSS = {
-  radius: 3.2,
-  baseHp: 30,
-  hpPerBossWave: 15,
-  speed: 3.2,
-  contactDamage: 1,
-  scoreValue: 2500,
+export const NUTELLA = {
+  radius: 48,
+  baseHp: 28,
+  hpPerWave: 12,
+  speed: 55,
+  scoreValue: 3000,
 };
 
 export const WAVE = {
   baseCount: 6,
   countPerWave: 2,
-  speedPerWave: 0.4,
+  speedPerWave: 6,
   spawnDelayMs: 550,
-  betweenWaveMs: 3200,
-  maxActive: 45,
+  betweenWaveMs: 2800,
+  maxActive: 40,
+  bossEvery: 5,
 };
+
+export function isBossWave(wave) {
+  return wave > 0 && wave % WAVE.bossEvery === 0;
+}
 
 export function getWaveConfig(waveNumber) {
   const w = Math.max(1, waveNumber);
-  const isBoss = w % 5 === 0;
 
-  if (isBoss) {
+  if (isBossWave(w)) {
     return {
       wave: w,
       isBoss: true,
       count: 0,
-      bossHp: BOSS.baseHp + Math.floor(w / 5) * BOSS.hpPerBossWave,
-      minionCount: 4 + Math.floor(w / 5) * 2,
-      speed: ZOMBIE.baseSpeed + w * 0.15,
+      minions: 4 + Math.floor(w / 5) * 2,
+      bossHp: NUTELLA.baseHp + Math.floor(w / 5) * NUTELLA.hpPerWave,
+      speed: BREAD.baseSpeed + w * 4,
       hp: 1,
-      spawnDelayMs: 800,
-      betweenWaveMs: WAVE.betweenWaveMs + 1000,
+      spawnDelayMs: 700,
+      betweenWaveMs: WAVE.betweenWaveMs + 800,
     };
   }
 
@@ -56,9 +61,9 @@ export function getWaveConfig(waveNumber) {
     wave: w,
     isBoss: false,
     count: WAVE.baseCount + (w - 1) * WAVE.countPerWave,
-    speed: ZOMBIE.baseSpeed + (w - 1) * WAVE.speedPerWave,
-    hp: ZOMBIE.baseHp + Math.floor((w - 1) / 4),
-    spawnDelayMs: Math.max(220, WAVE.spawnDelayMs - (w - 1) * 25),
+    speed: BREAD.baseSpeed + (w - 1) * WAVE.speedPerWave,
+    hp: BREAD.baseHp + Math.floor((w - 1) / 4),
+    spawnDelayMs: Math.max(220, WAVE.spawnDelayMs - (w - 1) * 22),
     betweenWaveMs: WAVE.betweenWaveMs,
   };
 }

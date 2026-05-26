@@ -1,7 +1,6 @@
 import { EventBus } from '../shared/EventBus.js';
 import { PLAYER } from './LevelConfig.js';
-import { getUniverseForWave } from './UniverseConfig.js';
-import { randomFrom, KILL_QUIPS, BOSS_QUIPS, waveMessage } from './Quips.js';
+import { randomFrom, KILL_QUIPS, BOSS_QUIPS, HIT_QUIPS, waveMessage } from './Quips.js';
 
 export class GameState {
   constructor() {
@@ -15,7 +14,6 @@ export class GameState {
     this.zombiesRemaining = 0;
     this.isRunning = false;
     this.isInvincible = false;
-    this.currentUniverse = null;
     this.isBossWave = false;
   }
 
@@ -27,31 +25,23 @@ export class GameState {
 
   nextWave() {
     this.wave += 1;
-    this.currentUniverse = getUniverseForWave(this.wave);
     this.isBossWave = this.wave % 5 === 0;
-    const message = waveMessage(this.wave, this.currentUniverse);
-
-    EventBus.emit('universe-changed', {
-      wave: this.wave,
-      universe: this.currentUniverse,
-    });
     EventBus.emit('wave-started', {
       wave: this.wave,
-      message,
-      universe: this.currentUniverse,
+      message: waveMessage(this.wave, this.isBossWave),
       isBoss: this.isBossWave,
     });
   }
 
-  setWaveZombieCount(count) {
+  setWaveEnemyCount(count) {
     this.zombiesRemaining = count;
   }
 
-  onZombieKilled(x, z, isBoss = false) {
-    const points = isBoss ? 2500 + this.wave * 200 : 100 + this.wave * 15;
+  onEnemyKilled(x, y, isBoss = false) {
+    const points = isBoss ? 3000 + this.wave * 150 : 100 + this.wave * 12;
     this.score += points;
     const quip = randomFrom(isBoss ? BOSS_QUIPS : KILL_QUIPS);
-    EventBus.emit('zombie-killed', { points, x, y: z, quip, isBoss });
+    EventBus.emit('enemy-killed', { points, x, y, quip, isBoss });
     EventBus.emit('score-changed', this.score);
     EventBus.emit('quip-shown', quip);
   }
@@ -64,9 +54,11 @@ export class GameState {
     if (this.isInvincible || !this.isRunning) return false;
 
     this.lives -= 1;
+    EventBus.emit('jar-damaged', { lives: this.lives, maxLives: PLAYER.lives });
     EventBus.emit('player-hit', { livesRemaining: this.lives });
     EventBus.emit('life-lost', this.lives);
-    EventBus.emit('screen-shake', { intensity: 8 });
+    EventBus.emit('quip-shown', randomFrom(HIT_QUIPS));
+    EventBus.emit('screen-shake', { intensity: 7 });
 
     if (this.lives <= 0) {
       this.endGame();

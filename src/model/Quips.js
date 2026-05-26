@@ -1,39 +1,53 @@
 export const KILL_QUIPS = [
-  'RIP berry',
-  'That\'s not jam!',
-  'Spread elsewhere!',
-  'Preserved!',
-  'Too chunky!',
-  'Out of season!',
-  'Bon appétit... NOT',
-  'Splat!',
-  'Seedless defeat',
-  'Pectin power!',
+  'Toasted!',
+  'That\'s not butter!',
+  'Crumb deleted',
+  'Jam > carbs',
+  'Soggy defeat',
+  'Crunch cancelled',
+  'No more crust',
+  'Spread the news: you lost',
+  'Burnt to a crisp',
+  'Gluten-free ghost',
 ];
 
 export const BOSS_QUIPS = [
-  'The Mega-Jar trembles!',
-  'Lid pop critical!',
-  'Vacuum seal broken!',
-  'That boss was THICC',
-  'Condensed evil defeated',
+  'Nutella has fallen!',
+  'Hazelnut humiliation',
+  'The jar lid popped!',
+  'Choco-boss melted',
+  'Spreadsheet says: dead',
+];
+
+export const HIT_QUIPS = [
+  'Ouch! Jar cracked!',
+  'Bread fought back!',
+  'That hurt the preserve!',
+  'Crack goes the jar...',
 ];
 
 export const GAME_OVER_QUIPS = [
-  'You became confiture.',
-  'The jar claims another.',
-  'Preserved for eternity.',
-  'Should\'ve read the expiry date.',
-  'The pantry wins again.',
+  'You became marmalade.',
+  'The jar is empty.',
+  'Preserved... in shame.',
+  'Nutella wins. Humanity loses.',
+  'Should\'ve stayed in the pantry.',
+];
+
+export const WAVE_INTROS = [
+  'Bread army rising',
+  'Toast incoming',
+  'The bakery awakens',
+  'Crusty revenge',
+  'Sourdough strike force',
+  'Baguette battalion',
 ];
 
 export function randomFrom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-export function waveMessage(wave, universe) {
-  if (wave % 5 === 0) {
-    return `BOSS WAVE ${wave}: ${universe.name} — ${universe.tagline}`;
-  }
-  return `Wave ${wave}: ${universe.name} — ${universe.tagline}`;
+export function waveMessage(wave, isBoss) {
+  if (isBoss) return `BOSS WAVE ${wave}: NUTELLA OVERLORD descends!`;
+  return `Wave ${wave}: ${randomFrom(WAVE_INTROS)}`;
 }

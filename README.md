@@ -1,15 +1,15 @@
-# Confiture Ops 3D
+# Jam Ops
 
-Dead Ops–style **3D** top-down arcade shooter. Funny jam theme, **a full universe per wave**, and a **boss every 5 waves**.
+2D pixel-art arcade: **you are a jam jar**, shoot jam at **angry bread**, survive the **Nutella boss** every 5 waves.
 
-## Run locally
+Your jar **cracks as you lose HP** — 3 hits and you're marmalade.
+
+## Run
 
 ```bash
 npm install
 npm run dev
 ```
-
-Open the URL in a **desktop browser** (Chrome/Firefox).
 
 ## Controls
 
@@ -17,20 +17,12 @@ Open the URL in a **desktop browser** (Chrome/Firefox).
 |-------|--------|
 | WASD / Arrows | Move |
 | Mouse | Aim |
-| Click / Space | Shoot (hold for auto-fire) |
-| Enter | Start (main menu) |
+| Click / Space | Shoot jam |
+| Enter | Start / retry |
 
 ## Features
 
-- **3D arcade** — Three.js, top-down camera, stick-figure hero vs blob zombies
-- **6 universes** — Pantry, Neon Jellyverse, Cosmic Marmalade, Deep Freeze, Volcano, Candy (cycles each wave)
-- **Boss waves** — Every 5 waves: Mega-Jar boss + minions in the Temple universe
-- **MVC + EventBus** — see `guidelines_skill.md` and `TASKS.md`
-
-## Build
-
-```bash
-npm run build
-```
-
-Deploy `dist/` to Vercel or any static host.
+- Pixel-art jam jar player with 4 crack stages
+- Bread slice enemies
+- Nutella Overlord boss (wave 5, 10, 15…)
+- Funny jam vs bread quips
