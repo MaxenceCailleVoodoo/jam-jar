@@ -1,6 +1,6 @@
-# Confiture Ops
+# Confiture Ops 3D
 
-Dead Ops–style top-down zombie arcade shooter. Stick figures, dot zombies, funny quips.
+Dead Ops–style **3D** top-down arcade shooter. Funny jam theme, **a full universe per wave**, and a **boss every 5 waves**.
 
 ## Run locally
 
@@ -9,7 +9,23 @@ npm install
 npm run dev
 ```
 
-Open in a desktop browser. **WASD** to move, **mouse** to aim, **click** or **Space** to shoot.
+Open the URL in a **desktop browser** (Chrome/Firefox).
+
+## Controls
+
+| Input | Action |
+|-------|--------|
+| WASD / Arrows | Move |
+| Mouse | Aim |
+| Click / Space | Shoot (hold for auto-fire) |
+| Enter | Start (main menu) |
+
+## Features
+
+- **3D arcade** — Three.js, top-down camera, stick-figure hero vs blob zombies
+- **6 universes** — Pantry, Neon Jellyverse, Cosmic Marmalade, Deep Freeze, Volcano, Candy (cycles each wave)
+- **Boss waves** — Every 5 waves: Mega-Jar boss + minions in the Temple universe
+- **MVC + EventBus** — see `guidelines_skill.md` and `TASKS.md`
 
 ## Build
 
@@ -17,8 +33,4 @@ Open in a desktop browser. **WASD** to move, **mouse** to aim, **click** or **Sp
 npm run build
 ```
 
-Output in `dist/` — deploy to Vercel or any static host.
-
-## Architecture
-
-Phaser 3 + Vite, MVC with EventBus. See `guidelines_skill.md` and `TASKS.md`.
+Deploy `dist/` to Vercel or any static host.

@@ -1,6 +1,7 @@
 import { EventBus } from '../shared/EventBus.js';
 import { PLAYER } from './LevelConfig.js';
-import { randomFrom, KILL_QUIPS, waveMessage } from './Quips.js';
+import { getUniverseForWave } from './UniverseConfig.js';
+import { randomFrom, KILL_QUIPS, BOSS_QUIPS, waveMessage } from './Quips.js';
 
 export class GameState {
   constructor() {
@@ -12,10 +13,10 @@ export class GameState {
     this.lives = PLAYER.lives;
     this.wave = 0;
     this.zombiesRemaining = 0;
-    this.zombiesKilledThisWave = 0;
     this.isRunning = false;
-    this.isPaused = false;
     this.isInvincible = false;
+    this.currentUniverse = null;
+    this.isBossWave = false;
   }
 
   startGame() {
@@ -26,32 +27,36 @@ export class GameState {
 
   nextWave() {
     this.wave += 1;
+    this.currentUniverse = getUniverseForWave(this.wave);
+    this.isBossWave = this.wave % 5 === 0;
+    const message = waveMessage(this.wave, this.currentUniverse);
+
+    EventBus.emit('universe-changed', {
+      wave: this.wave,
+      universe: this.currentUniverse,
+    });
     EventBus.emit('wave-started', {
       wave: this.wave,
-      message: waveMessage(this.wave),
+      message,
+      universe: this.currentUniverse,
+      isBoss: this.isBossWave,
     });
   }
 
   setWaveZombieCount(count) {
     this.zombiesRemaining = count;
-    this.zombiesKilledThisWave = 0;
   }
 
-  onZombieSpawned() {
-    // tracked by spawn controller
-  }
-
-  onZombieKilled(x, y) {
-    const points = 100 + this.wave * 10;
+  onZombieKilled(x, z, isBoss = false) {
+    const points = isBoss ? 2500 + this.wave * 200 : 100 + this.wave * 15;
     this.score += points;
-    this.zombiesKilledThisWave += 1;
-    const quip = randomFrom(KILL_QUIPS);
-    EventBus.emit('zombie-killed', { points, x, y, quip });
+    const quip = randomFrom(isBoss ? BOSS_QUIPS : KILL_QUIPS);
+    EventBus.emit('zombie-killed', { points, x, y: z, quip, isBoss });
     EventBus.emit('score-changed', this.score);
     EventBus.emit('quip-shown', quip);
   }
 
-  onWaveZombieDefeated() {
+  onWaveEnemyDefeated() {
     this.zombiesRemaining -= 1;
   }
 
@@ -61,7 +66,7 @@ export class GameState {
     this.lives -= 1;
     EventBus.emit('player-hit', { livesRemaining: this.lives });
     EventBus.emit('life-lost', this.lives);
-    EventBus.emit('screen-shake', { intensity: 6 });
+    EventBus.emit('screen-shake', { intensity: 8 });
 
     if (this.lives <= 0) {
       this.endGame();

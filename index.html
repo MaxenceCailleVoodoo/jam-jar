@@ -3,14 +3,126 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Confiture Ops</title>
+    <title>Confiture Ops 3D</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet" />
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { background: #0d0d1a; overflow: hidden; }
-      canvas { display: block; margin: 0 auto; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #080810; font-family: 'Space Grotesk', monospace; }
+      #game { display: block; width: 100%; height: 100%; }
+      #ui { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+      #ui > * { pointer-events: auto; }
+      .panel {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(ellipse at center, rgba(20,10,40,0.5) 0%, rgba(0,0,0,0.85) 70%);
+        transition: opacity 0.4s;
+      }
+      .hidden { opacity: 0; pointer-events: none !important; }
+      h1 {
+        font-size: clamp(2.5rem, 6vw, 5rem);
+        color: #ff6b6b;
+        text-shadow: 0 0 40px rgba(255,100,100,0.5);
+        letter-spacing: 0.08em;
+      }
+      .subtitle { color: #aaa; font-size: 1.2rem; margin: 0.5rem 0 2rem; }
+      .btn {
+        font-family: inherit;
+        font-size: 1.1rem;
+        padding: 0.9rem 2.2rem;
+        margin: 0.4rem;
+        border: 2px solid #ffe066;
+        background: rgba(255,224,102,0.12);
+        color: #ffe066;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: transform 0.15s, background 0.15s;
+      }
+      .btn:hover { transform: scale(1.05); background: rgba(255,224,102,0.25); }
+      .controls { color: #666; margin-top: 1.5rem; font-size: 0.95rem; }
+      #hud {
+        background: none;
+        align-items: stretch;
+        justify-content: flex-start;
+        padding: 1.2rem;
+        pointer-events: none !important;
+      }
+      #hud > * { pointer-events: none; }
+      .hud-row { display: flex; gap: 2rem; flex-wrap: wrap; }
+      .stat { color: #fff; font-size: 1.3rem; text-shadow: 0 2px 8px #000; }
+      .stat span { color: #ffe066; }
+      #universe-tag {
+        position: absolute;
+        top: 1.2rem;
+        right: 1.2rem;
+        padding: 0.4rem 1rem;
+        border: 2px solid #ff6b6b;
+        color: #ff6b6b;
+        font-size: 0.9rem;
+        border-radius: 20px;
+        background: rgba(0,0,0,0.4);
+      }
+      #quip {
+        position: absolute;
+        bottom: 2rem;
+        left: 50%;
+        transform: translateX(-50%);
+        color: #88ff88;
+        font-size: 1.2rem;
+        transition: transform 0.2s;
+      }
+      #quip.pop { transform: translateX(-50%) scale(1.15); }
+      #wave-banner {
+        position: absolute;
+        top: 40%;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: clamp(1.2rem, 3vw, 2rem);
+        color: #fff;
+        text-align: center;
+        max-width: 80%;
+        text-shadow: 0 0 20px rgba(255,100,100,0.8);
+        transition: opacity 0.5s;
+      }
+      #wave-banner.boss {
+        color: #ff4444;
+        font-size: clamp(1.5rem, 4vw, 2.5rem);
+        animation: pulse 0.5s ease infinite alternate;
+      }
+      @keyframes pulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.05); } }
     </style>
   </head>
   <body>
+    <canvas id="game"></canvas>
+    <div id="ui">
+      <div id="menu" class="panel">
+        <h1>CONFITURE OPS</h1>
+        <p class="subtitle">3D arcade chaos — each wave is a whole universe</p>
+        <button id="btn-play" class="btn">SPREAD CHAOS</button>
+        <p class="controls">WASD move · Mouse aim · Click / Space shoot · Boss every 5 waves</p>
+      </div>
+      <div id="hud" class="panel hidden">
+        <div class="hud-row">
+          <div class="stat">Score <span id="score">000000</span></div>
+          <div class="stat"><span id="wave">Wave 1</span></div>
+          <div class="stat" id="lives">♥♥♥</div>
+        </div>
+        <div id="universe-tag">Pantry Prime</div>
+        <div id="wave-banner" class="hidden"></div>
+        <div id="quip"></div>
+      </div>
+      <div id="gameover" class="panel hidden">
+        <h1>GAME OVER</h1>
+        <p id="go-quip" class="subtitle"></p>
+        <p class="stat">Final score: <span id="final-score">000000</span></p>
+        <button id="btn-retry" class="btn">TRY AGAIN</button>
+        <button id="btn-menu" class="btn">MENU</button>
+      </div>
+    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

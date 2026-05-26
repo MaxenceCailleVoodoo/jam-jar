@@ -12,6 +12,21 @@ export function angleBetween(x1, y1, x2, y2) {
   return Math.atan2(y2 - y1, x2 - x1);
 }
 
+export function randomEdgeArena(half, margin = 2) {
+  const side = Math.floor(Math.random() * 4);
+  const t = (Math.random() * 2 - 1) * half;
+  switch (side) {
+    case 0:
+      return { x: t, z: -half - margin };
+    case 1:
+      return { x: half + margin, z: t };
+    case 2:
+      return { x: t, z: half + margin };
+    default:
+      return { x: -half - margin, z: t };
+  }
+}
+
 export function randomEdge(width, height, margin = 40) {
   const side = Math.floor(Math.random() * 4);
   switch (side) {
