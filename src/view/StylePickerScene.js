@@ -133,6 +133,13 @@ export class StylePickerScene extends Phaser.Scene {
   }
 
   launch(sceneKey) {
+    let bgm = this.sound.get('bgm');
+    if (!bgm) {
+      bgm = this.sound.add('bgm', { loop: true, volume: 0.45 });
+    }
+    if (!bgm.isPlaying) {
+      bgm.play();
+    }
     this.scene.start(sceneKey);
   }
 }

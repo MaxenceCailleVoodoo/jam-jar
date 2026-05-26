@@ -12,6 +12,7 @@ export class BootScene extends Phaser.Scene {
         this.load.image(`face-src-${char.id}`, char.faceSource);
       }
     }
+    this.load.audio('bgm', 'assets/audio/techno-bgm.mp3');
   }
 
   create() {
