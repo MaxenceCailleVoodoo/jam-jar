@@ -39,7 +39,7 @@ const JAR_SCALE = 0.5;
 const JAR_W = 180;
 const JAR_H = 220;
 
-/** Zone intérieure du pot (coords normalisées 0–1). */
+/** Cavité confiture visible à travers le pot. */
 const JAR_FILL_POLY = [
   [0.22, 0.30], [0.20, 0.52], [0.26, 0.88], [0.50, 0.91],
   [0.74, 0.88], [0.80, 0.52], [0.78, 0.30],
@@ -90,7 +90,7 @@ function wobblyPath(ctx, points, jitter, rand, close = true) {
   return jittered;
 }
 
-/** crackLevel: 0 = intact, 1 = fêlure légère (1 PV restant). La confiture est dessinée à part. */
+/** crackLevel: 0 = intact, 1 = fêlure (1 PV). La confiture est dessinée via jamFill. */
 function drawJarFrame(W, H, crackLevel, seed) {
   const { canvas, ctx } = makeCanvas(W, H);
   const rand = rng(seed);
@@ -113,7 +113,6 @@ function drawJarFrame(W, H, crackLevel, seed) {
   ctx.fill();
   ctx.restore();
 
-  // Fenêtre transparente pour voir la confiture (graphics depth 19).
   const cavityPts = JAR_FILL_POLY.map(([nx, ny]) => [W * nx, H * ny]);
   ctx.save();
   wobblyPath(ctx, cavityPts, 5, rand, true);
@@ -346,9 +345,12 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.maxKillsInOneShot = 0;
 
     this.jamFill = this.add.graphics().setDepth(19);
-    this.jarFx = this.add.graphics().setDepth(21);
+    this.jarFx = this.add.graphics().setDepth(22);
+    this.jarCracks = this.add.graphics().setDepth(21).setVisible(false);
 
-    this.player = this.physics.add.sprite(ARENA.width / 2, ARENA.height / 2, this.jarAnim.firstKey);
+    this.player = this.physics.add.sprite(
+      ARENA.width / 2, ARENA.height / 2, this.jarAnim.firstKey,
+    );
     this.player.play(this.jarAnim.animKey);
     this.player.setScale(JAR_SCALE);
     this.player.body.setCircle(50, 40, 50);
@@ -505,9 +507,30 @@ export class StyleDoodleScene extends Phaser.Scene {
     });
   }
 
-  drawJamOverflow(x, y, s, t) {
+  drawJarCracks() {
+    const g = this.jarCracks;
+    g.clear();
+    if (this.hp > 1 || !this.player.visible) return;
+    const w = this.player.displayWidth;
+    const h = this.player.displayHeight;
+    const x = this.player.x;
+    const y = this.player.y;
+    g.lineStyle(3, 0x2a1810, 0.85);
+    g.beginPath();
+    g.moveTo(x - w * 0.08, y - h * 0.12);
+    g.lineTo(x - w * 0.02, y + h * 0.05);
+    g.lineTo(x - w * 0.06, y + h * 0.22);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(x + w * 0.1, y - h * 0.08);
+    g.lineTo(x + w * 0.04, y + h * 0.12);
+    g.stroke();
+  }
+
+  drawJamOverflow(x, y, t) {
     const g = this.jarFx;
     g.clear();
+    const s = JAR_SCALE;
     const lidY = y - (JAR_H * s) / 2 + JAR_H * 0.22 * s;
 
     for (let i = 0; i < 5; i++) {
@@ -545,11 +568,11 @@ export class StyleDoodleScene extends Phaser.Scene {
     if (!this.player.visible) {
       this.jamFill.clear();
       this.jarFx.clear();
+      this.jarCracks.clear();
       return;
     }
+
     const ratio = Phaser.Math.Clamp(this.charge, 0, 1);
-    const x = this.player.x;
-    const y = this.player.y;
     const s = JAR_SCALE;
     const worldPoly = jarPolyWorld(this.player, s);
     const ys = worldPoly.map((p) => p.y);
@@ -559,44 +582,35 @@ export class StyleDoodleScene extends Phaser.Scene {
 
     this.jamFill.clear();
     this.jarFx.clear();
+    this.drawJarCracks();
 
-    if (ratio < 0.01) {
-      this.chargeLabel.setText(`charge ${Math.round(ratio * 100)}%`);
-      this.chargeLabel.setColor(PALETTE.uiAccent);
-      this.player.clearTint();
-      return;
-    }
+    if (ratio >= 0.01) {
+      const clipped = clipPolygonAtMinY(worldPoly, surfaceY);
+      if (clipped.length >= 3) {
+        const jamColor = ratio >= 0.999 ? 0xff3355 : 0xcc2244;
+        this.jamFill.fillStyle(jamColor, 0.94);
+        this.jamFill.beginPath();
+        this.jamFill.moveTo(clipped[0].x, clipped[0].y);
+        for (let i = 1; i < clipped.length; i++) {
+          this.jamFill.lineTo(clipped[i].x, clipped[i].y);
+        }
+        this.jamFill.closePath();
+        this.jamFill.fillPath();
 
-    const clipped = clipPolygonAtMinY(worldPoly, surfaceY);
-    if (clipped.length >= 3) {
-      const jamColor = ratio >= 0.999 ? 0xff3355 : 0xcc2244;
-      this.jamFill.fillStyle(jamColor, 0.94);
-      this.jamFill.beginPath();
-      this.jamFill.moveTo(clipped[0].x, clipped[0].y);
-      for (let i = 1; i < clipped.length; i++) {
-        this.jamFill.lineTo(clipped[i].x, clipped[i].y);
+        const surfacePts = clipped.filter((p) => Math.abs(p.y - surfaceY) < 3 * s);
+        const surfX = surfacePts.length
+          ? surfacePts.reduce((a, p) => a + p.x, 0) / surfacePts.length
+          : this.player.x;
+        this.jamFill.fillStyle(0xff5577, 0.55);
+        this.jamFill.fillEllipse(surfX, surfaceY + 3 * s, 34 * s, 11 * s);
       }
-      this.jamFill.closePath();
-      this.jamFill.fillPath();
-
-      let sx = 0; let sy = 0;
-      clipped.forEach((p) => { sx += p.x; sy += p.y; });
-      sx /= clipped.length;
-      const surfacePts = clipped.filter((p) => Math.abs(p.y - surfaceY) < 2 * s);
-      const surfX = surfacePts.length
-        ? surfacePts.reduce((a, p) => a + p.x, 0) / surfacePts.length
-        : sx;
-      this.jamFill.fillStyle(0xff5577, 0.55);
-      this.jamFill.fillEllipse(surfX, surfaceY + 3 * s, 34 * s, 11 * s);
-      this.jamFill.fillStyle(0xff88aa, 0.35);
-      this.jamFill.fillEllipse(surfX - 8 * s, surfaceY + 5 * s, 12 * s, 5 * s);
     }
 
     if (ratio >= 0.999) {
       this.chargeLabel.setText('PLEIN !');
       this.chargeLabel.setColor(PALETTE.uiAccent);
       this.player.clearTint();
-      this.drawJamOverflow(x, y, s, this.time.now);
+      this.drawJamOverflow(this.player.x, this.player.y, this.time.now);
     } else {
       this.chargeLabel.setText(`charge ${Math.round(ratio * 100)}%`);
       this.chargeLabel.setColor(PALETTE.uiAccent);
@@ -610,6 +624,8 @@ export class StyleDoodleScene extends Phaser.Scene {
     } else {
       this.player.play(this.jarAnim.animKey);
     }
+    this.jarCracks.setVisible(this.hp <= 1);
+    this.drawJarCracks();
   }
 
   spawnEnemy() {
@@ -847,6 +863,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.player.setVisible(false);
     this.jamFill.clear();
     this.jarFx.clear();
+    this.jarCracks.clear();
 
     for (let i = 0; i < 12; i++) {
       const shard = this.add.rectangle(
