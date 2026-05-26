@@ -8,7 +8,7 @@ import {
   setupMovementInput, readMovementInput, chasePlayer, randomEdgeSpawn,
   scoreForCombo, comboTier, enemySpeedFor, spawnIntervalFor,
   killAllEnemies,
-  QUIPS_JUICY, QUIPS_DEATH, pickQuip,
+  QUIPS_JUICY, QUIPS_DEATH, pickQuip, playJamExplosion,
 } from './sharedSurvival.js';
 
 const KEY = 'StyleJuicy';
@@ -356,6 +356,8 @@ export class StyleJuicyScene extends Phaser.Scene {
   }
 
   doGlobalJamWipe() {
+    playJamExplosion(this);
+
     const jx = this.player.x; const jy = this.player.y;
 
     this.tweens.add({

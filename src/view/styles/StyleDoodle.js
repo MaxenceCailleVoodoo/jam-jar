@@ -9,7 +9,7 @@ import {
   setupMovementInput, readMovementInput, chasePlayer, randomEdgeSpawn,
   scoreForCombo, comboTier, enemySpeedFor, spawnIntervalFor,
   killEnemiesInRadius, killEnemiesStaggered,
-  QUIPS_DOODLE, QUIPS_DEATH, pickQuip,
+  QUIPS_DOODLE, QUIPS_DEATH, pickQuip, playJamExplosion,
 } from './sharedSurvival.js';
 
 const KEY = 'StyleDoodle';
@@ -438,6 +438,7 @@ export class StyleDoodleScene extends Phaser.Scene {
 
   doChargedExplosion() {
     this.isExploding = true;
+    playJamExplosion(this);
 
     const jx = this.player.x; const jy = this.player.y;
     const isFull = this.charge >= 0.999;

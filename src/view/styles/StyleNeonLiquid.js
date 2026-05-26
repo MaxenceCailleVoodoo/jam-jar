@@ -9,7 +9,7 @@ import {
   setupMovementInput, readMovementInput, chasePlayer, randomEdgeSpawn,
   scoreForCombo, comboTier, enemySpeedFor, spawnIntervalFor,
   killEnemiesInRadius,
-  QUIPS_NEON, QUIPS_DEATH, pickQuip,
+  QUIPS_NEON, QUIPS_DEATH, pickQuip, playJamExplosion,
 } from './sharedSurvival.js';
 
 const KEY = 'StyleNeonLiquid';
@@ -322,6 +322,8 @@ export class StyleNeonLiquidScene extends Phaser.Scene {
   }
 
   doRadiusJam() {
+    playJamExplosion(this);
+
     const jx = this.player.x; const jy = this.player.y;
 
     this.tweens.add({

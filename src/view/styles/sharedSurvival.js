@@ -169,3 +169,43 @@ export const QUIPS_DEATH = [
 export function pickQuip(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
+
+const JAM_EXPLOSION_VOLUME = 0.9;
+const JAM_EXPLOSION_FALLBACK_MS = 3200;
+
+/** Pause la BGM, joue l'explosion confiture, puis remet la BGM. */
+export function playJamExplosion(scene) {
+  const sm = scene.sound;
+  const bgm = sm.get('bgm');
+
+  if (bgm && bgm.getData('jamExplosionActive') !== true) {
+    bgm.setData('jamExplosionActive', true);
+    bgm.setData('jamExplosionSavedVolume', bgm.volume);
+    bgm.setData('jamExplosionWasPlaying', bgm.isPlaying);
+    if (bgm.isPlaying) bgm.pause();
+  }
+
+  let sfx = sm.get('jam-explosion');
+  if (!sfx) sfx = sm.add('jam-explosion', { volume: JAM_EXPLOSION_VOLUME });
+  if (sfx.isPlaying) sfx.stop();
+
+  let restored = false;
+  const restoreBgm = () => {
+    if (restored) return;
+    restored = true;
+    if (!bgm || bgm.getData('jamExplosionActive') !== true) return;
+
+    const vol = bgm.getData('jamExplosionSavedVolume');
+    const wasPlaying = bgm.getData('jamExplosionWasPlaying');
+    bgm.setData('jamExplosionActive', null);
+    bgm.setData('jamExplosionSavedVolume', null);
+    bgm.setData('jamExplosionWasPlaying', null);
+
+    if (typeof vol === 'number') bgm.setVolume(vol);
+    if (wasPlaying && !bgm.isPlaying) bgm.play();
+  };
+
+  sfx.once('complete', restoreBgm);
+  scene.time.delayedCall(JAM_EXPLOSION_FALLBACK_MS, restoreBgm);
+  sfx.play();
+}

@@ -5,6 +5,7 @@ export class BootScene extends Phaser.Scene {
 
   preload() {
     this.load.audio('bgm', 'assets/audio/techno-bgm.mp3');
+    this.load.audio('jam-explosion', 'assets/audio/jam-explosion.wav');
   }
 
   create() {
