@@ -34,10 +34,16 @@ const CHARGE_MIN_RADIUS = 120;
 const CHARGE_MAX_RADIUS = 520;
 const CHARGE_MIN_TO_FIRE = 0.02;
 const CINEMATIC_MS = 700;
-const REPAIR_KILL_THRESHOLD = 30;
+const REPAIR_KILL_THRESHOLD = 20;
 const JAR_SCALE = 0.5;
 const JAR_W = 180;
 const JAR_H = 220;
+
+/** Zone intérieure du pot (coords normalisées 0–1). */
+const JAR_FILL_POLY = [
+  [0.22, 0.30], [0.20, 0.52], [0.26, 0.88], [0.50, 0.91],
+  [0.74, 0.88], [0.80, 0.52], [0.78, 0.30],
+];
 
 function makeCanvas(w, h) {
   const c = document.createElement('canvas');
@@ -108,12 +114,7 @@ function drawJarFrame(W, H, crackLevel, seed) {
   ctx.restore();
 
   // Fenêtre transparente pour voir la confiture (graphics depth 19).
-  const cavityPts = [
-    [W * 0.24, H * 0.42], [W * 0.22, H * 0.62],
-    [W * 0.3, H * 0.84], [W * 0.5, H * 0.86],
-    [W * 0.7, H * 0.84], [W * 0.78, H * 0.62],
-    [W * 0.76, H * 0.42],
-  ];
+  const cavityPts = JAR_FILL_POLY.map(([nx, ny]) => [W * nx, H * ny]);
   ctx.save();
   wobblyPath(ctx, cavityPts, 5, rand, true);
   ctx.globalCompositeOperation = 'destination-out';
@@ -179,77 +180,66 @@ function drawJarFrame(W, H, crackLevel, seed) {
   return canvas;
 }
 
-function drawToastFrame(W, H, seed) {
+function drawToastFromImage(scene, W, H, seed) {
   const { canvas, ctx } = makeCanvas(W, H);
   const rand = rng(seed);
+  const src = scene.textures.get('toast-slice').getSourceImage();
 
-  ctx.fillStyle = 'rgba(40,30,20,0.18)';
+  ctx.fillStyle = 'rgba(40,30,20,0.14)';
   ctx.beginPath();
-  ctx.ellipse(W / 2, H * 0.93, W * 0.33, H * 0.04, 0, 0, Math.PI * 2);
+  ctx.ellipse(W / 2, H * 0.9, W * 0.32, H * 0.035, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Silhouette plus \"pain de mie\" : haut bombé + base plate.
-  const pts = [
-    [W * 0.22, H * 0.22],
-    [W * 0.22, H * 0.55],
-    [W * 0.24, H * 0.82],
-    [W * 0.5, H * 0.86],
-    [W * 0.76, H * 0.82],
-    [W * 0.78, H * 0.55],
-    [W * 0.78, H * 0.22],
-    [W * 0.64, H * 0.12],
-    [W * 0.5, H * 0.1],
-    [W * 0.36, H * 0.12],
-  ];
+  const sw = src.width || src.naturalWidth;
+  const sh = src.height || src.naturalHeight;
+  const pad = 4;
+  const maxW = W - pad * 2;
+  const maxH = H - pad * 2;
+  const fit = Math.min(maxW / sw, maxH / sh) * (0.97 + (rand() - 0.5) * 0.04);
+  const iw = sw * fit;
+  const ih = sh * fit;
+  const wobble = (rand() - 0.5) * 4;
+  const tilt = (rand() - 0.5) * 0.06;
 
   ctx.save();
-  wobblyPath(ctx, pts, 5, rand, true);
-  ctx.fillStyle = PALETTE.toastWash;
-  ctx.fill();
-  ctx.fillStyle = PALETTE.toast;
-  ctx.fill();
+  ctx.translate(W / 2 + wobble, H / 2 + wobble * 0.4);
+  ctx.rotate(tilt);
+  ctx.drawImage(src, -iw / 2, -ih / 2, iw, ih);
   ctx.restore();
-
-  ctx.save();
-  ctx.strokeStyle = PALETTE.ink;
-  ctx.lineWidth = 4.5;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  wobblyPath(ctx, pts, 5, rand, true);
-  ctx.stroke();
-  ctx.restore();
-
-  // Crust \"croûte\" : ligne plus foncée à l'extérieur.
-  ctx.save();
-  ctx.strokeStyle = PALETTE.crust;
-  ctx.globalAlpha = 0.55;
-  ctx.lineWidth = 6;
-  ctx.lineJoin = 'round';
-  wobblyPath(ctx, pts, 3.5, rand, true);
-  ctx.stroke();
-  ctx.restore();
-
-  ctx.fillStyle = PALETTE.ink;
-  const eyeR = W * 0.05;
-  ctx.beginPath();
-  ctx.arc(W * 0.38 + (rand() - 0.5) * 3, H * 0.46 + (rand() - 0.5) * 3, eyeR, 0, Math.PI * 2);
-  ctx.arc(W * 0.62 + (rand() - 0.5) * 3, H * 0.46 + (rand() - 0.5) * 3, eyeR, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = PALETTE.ink;
-  ctx.lineWidth = 4;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  const my = H * 0.68;
-  ctx.moveTo(W * 0.34, my);
-  for (let i = 0; i <= 6; i++) {
-    const x = W * 0.34 + (W * 0.32) * (i / 6);
-    const y = my + ((i % 2 === 0) ? -W * 0.025 : W * 0.025);
-    ctx.lineTo(x, y);
-  }
-  ctx.stroke();
 
   return canvas;
+}
+
+function intersectAtY(a, b, y) {
+  const t = (y - a.y) / (b.y - a.y);
+  return { x: a.x + t * (b.x - a.x), y };
+}
+
+/** Garde la partie du polygone sous la surface (y >= surfaceY). */
+function clipPolygonAtMinY(points, surfaceY) {
+  const out = [];
+  const n = points.length;
+  for (let i = 0; i < n; i++) {
+    const curr = points[i];
+    const prev = points[(i + n - 1) % n];
+    const currIn = curr.y >= surfaceY;
+    const prevIn = prev.y >= surfaceY;
+    if (currIn) {
+      if (!prevIn) out.push(intersectAtY(prev, curr, surfaceY));
+      out.push(curr);
+    } else if (prevIn) {
+      out.push(intersectAtY(prev, curr, surfaceY));
+    }
+  }
+  return out;
+}
+
+function jarPolyWorld(player, s) {
+  const hw = JAR_W * s;
+  const hh = JAR_H * s;
+  const left = player.x - hw / 2;
+  const top = player.y - hh / 2;
+  return JAR_FILL_POLY.map(([nx, ny]) => ({ x: left + nx * hw, y: top + ny * hh }));
 }
 
 function buildWobbleAnim(scene, keyBase, drawFn, args) {
@@ -320,7 +310,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     buildPaperTexture(this, `${KEY}-paper`);
     this.jarAnim = buildWobbleAnim(this, `${KEY}-jar`, drawJarFrame, [JAR_W, JAR_H, 0]);
     this.jarFracturedAnim = buildWobbleAnim(this, `${KEY}-jar-fractured`, drawJarFrame, [JAR_W, JAR_H, 1]);
-    this.toastAnim = buildWobbleAnim(this, `${KEY}-toast`, drawToastFrame, [130, 130]);
+    this.toastAnim = buildWobbleAnim(this, `${KEY}-toast`, drawToastFromImage, [this, 130, 130]);
     buildBlobTexture(this, `${KEY}-jam`, PALETTE.jam);
     buildBlobTexture(this, `${KEY}-jam-light`, PALETTE.jamLight);
 
@@ -356,6 +346,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.maxKillsInOneShot = 0;
 
     this.jamFill = this.add.graphics().setDepth(19);
+    this.jarFx = this.add.graphics().setDepth(21);
 
     this.player = this.physics.add.sprite(ARENA.width / 2, ARENA.height / 2, this.jarAnim.firstKey);
     this.player.play(this.jarAnim.animKey);
@@ -399,7 +390,7 @@ export class StyleDoodleScene extends Phaser.Scene {
       fontSize: '22px', fontStyle: 'bold', color: PALETTE.uiText,
     }).setOrigin(1, 0).setDepth(100);
 
-    this.attackHint = this.add.text(ARENA.width - 28, 50, 'plein = wipe · 30+ kills = réparation', {
+    this.attackHint = this.add.text(ARENA.width - 28, 50, 'plein = wipe · 20+ kills = réparation', {
       fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
       fontSize: '13px', color: PALETTE.uiText,
     }).setOrigin(1, 0).setDepth(100);
@@ -434,7 +425,7 @@ export class StyleDoodleScene extends Phaser.Scene {
   }
 
   restartGame() {
-    if (this.scene.isActive()) this.scene.restart();
+    this.scene.restart();
   }
 
   bindKeyboardActions() {
@@ -456,7 +447,10 @@ export class StyleDoodleScene extends Phaser.Scene {
       this.ensureBgm();
       this.tryExplode();
     };
-    this._onRestartDown = () => this.restartGame();
+    this._onRestartDown = (event) => {
+      event?.preventDefault?.();
+      this.restartGame();
+    };
 
     this.spaceKey?.off('down', this._onSpaceDown);
     this.spaceKey?.on('down', this._onSpaceDown);
@@ -471,12 +465,22 @@ export class StyleDoodleScene extends Phaser.Scene {
     kb.off('keydown-R', this._onRestartDown);
     kb.on('keydown-R', this._onRestartDown);
 
+    this._windowKeyHandler = (event) => {
+      if (!event || event.repeat) return;
+      if (event.code === 'KeyR' || event.key === 'r' || event.key === 'R') {
+        event.preventDefault();
+        this.restartGame();
+      }
+    };
+    window.addEventListener('keydown', this._windowKeyHandler);
+
     this.events.once('shutdown', () => {
       this.spaceKey?.off('down', this._onSpaceDown);
       this.cursors?.space?.off('down', this._onSpaceDown);
       kb.off('keydown-SPACE', this._onSpaceDown);
       this.restartKey?.off('down', this._onRestartDown);
       kb.off('keydown-R', this._onRestartDown);
+      window.removeEventListener('keydown', this._windowKeyHandler);
     });
   }
 
@@ -501,41 +505,98 @@ export class StyleDoodleScene extends Phaser.Scene {
     });
   }
 
+  drawJamOverflow(x, y, s, t) {
+    const g = this.jarFx;
+    g.clear();
+    const lidY = y - (JAR_H * s) / 2 + JAR_H * 0.22 * s;
+
+    for (let i = 0; i < 5; i++) {
+      const phase = t / 380 + i * 1.35;
+      const dx = Math.cos(phase) * (18 + i * 4) * s;
+      const dy = Math.sin(phase * 1.2) * 6 * s - 8 * s;
+      g.fillStyle(0xcc2244, 0.88);
+      g.fillEllipse(x + dx, lidY + dy, 7 * s, 11 * s);
+      g.fillStyle(0xff5577, 0.55);
+      g.fillEllipse(x + dx, lidY + dy - 3 * s, 4 * s, 5 * s);
+    }
+
+    for (let i = 0; i < 6; i++) {
+      const phase = t / 520 + i * 0.95;
+      const sx = x + Math.cos(phase) * 38 * s;
+      const sy = lidY - 12 * s + Math.sin(phase * 1.4) * 10 * s;
+      const size = (5 + (i % 3) * 2) * s;
+      const alpha = 0.45 + 0.35 * Math.sin(t / 200 + i);
+      g.fillStyle(0xffaac8, alpha);
+      g.beginPath();
+      for (let p = 0; p < 5; p++) {
+        const a = (p / 5) * Math.PI * 2 - Math.PI / 2;
+        const r = p % 2 === 0 ? size : size * 0.42;
+        const px = sx + Math.cos(a) * r;
+        const py = sy + Math.sin(a) * r;
+        if (p === 0) g.moveTo(px, py);
+        else g.lineTo(px, py);
+      }
+      g.closePath();
+      g.fillPath();
+    }
+  }
+
   updateJarFill() {
     if (!this.player.visible) {
       this.jamFill.clear();
+      this.jarFx.clear();
       return;
     }
     const ratio = Phaser.Math.Clamp(this.charge, 0, 1);
     const x = this.player.x;
     const y = this.player.y;
     const s = JAR_SCALE;
-    const halfH = (JAR_H * s) / 2;
-
-    const cavityBottom = y - halfH + JAR_H * 0.86 * s;
-    const cavityTop = y - halfH + JAR_H * 0.42 * s;
-    const fillTop = cavityBottom - (cavityBottom - cavityTop) * ratio;
-    const innerLeft = x - 36 * s;
-    const innerRight = x + 36 * s;
-    const fillH = Math.max(0, cavityBottom - fillTop);
+    const worldPoly = jarPolyWorld(this.player, s);
+    const ys = worldPoly.map((p) => p.y);
+    const bottom = Math.max(...ys);
+    const top = Math.min(...ys);
+    const surfaceY = bottom - (bottom - top) * ratio;
 
     this.jamFill.clear();
-    if (fillH < 1) {
+    this.jarFx.clear();
+
+    if (ratio < 0.01) {
       this.chargeLabel.setText(`charge ${Math.round(ratio * 100)}%`);
       this.chargeLabel.setColor(PALETTE.uiAccent);
+      this.player.clearTint();
       return;
     }
 
-    const jamColor = ratio >= 0.999 ? 0xff3355 : 0xcc2244;
-    this.jamFill.fillStyle(jamColor, 0.92);
-    this.jamFill.fillRoundedRect(innerLeft, fillTop, innerRight - innerLeft, fillH, 6 * s);
-    this.jamFill.fillStyle(0xff5577, 0.5);
-    this.jamFill.fillEllipse(x, fillTop + fillH * 0.25, 28 * s, 10 * s);
+    const clipped = clipPolygonAtMinY(worldPoly, surfaceY);
+    if (clipped.length >= 3) {
+      const jamColor = ratio >= 0.999 ? 0xff3355 : 0xcc2244;
+      this.jamFill.fillStyle(jamColor, 0.94);
+      this.jamFill.beginPath();
+      this.jamFill.moveTo(clipped[0].x, clipped[0].y);
+      for (let i = 1; i < clipped.length; i++) {
+        this.jamFill.lineTo(clipped[i].x, clipped[i].y);
+      }
+      this.jamFill.closePath();
+      this.jamFill.fillPath();
+
+      let sx = 0; let sy = 0;
+      clipped.forEach((p) => { sx += p.x; sy += p.y; });
+      sx /= clipped.length;
+      const surfacePts = clipped.filter((p) => Math.abs(p.y - surfaceY) < 2 * s);
+      const surfX = surfacePts.length
+        ? surfacePts.reduce((a, p) => a + p.x, 0) / surfacePts.length
+        : sx;
+      this.jamFill.fillStyle(0xff5577, 0.55);
+      this.jamFill.fillEllipse(surfX, surfaceY + 3 * s, 34 * s, 11 * s);
+      this.jamFill.fillStyle(0xff88aa, 0.35);
+      this.jamFill.fillEllipse(surfX - 8 * s, surfaceY + 5 * s, 12 * s, 5 * s);
+    }
 
     if (ratio >= 0.999) {
       this.chargeLabel.setText('PLEIN !');
-      this.chargeLabel.setColor('#ffaa00');
-      this.player.setTint(0xffeecc);
+      this.chargeLabel.setColor(PALETTE.uiAccent);
+      this.player.clearTint();
+      this.drawJamOverflow(x, y, s, this.time.now);
     } else {
       this.chargeLabel.setText(`charge ${Math.round(ratio * 100)}%`);
       this.chargeLabel.setColor(PALETTE.uiAccent);
@@ -785,6 +846,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     const dx0 = this.player.x; const dy0 = this.player.y;
     this.player.setVisible(false);
     this.jamFill.clear();
+    this.jarFx.clear();
 
     for (let i = 0; i < 12; i++) {
       const shard = this.add.rectangle(
@@ -867,6 +929,11 @@ export class StyleDoodleScene extends Phaser.Scene {
   }
 
   update() {
+    if (this.restartKey && Phaser.Input.Keyboard.JustDown(this.restartKey)) {
+      this.restartGame();
+      return;
+    }
+
     if (this.spaceKey && Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
       this.ensureBgm();
       this.tryExplode();
@@ -879,7 +946,10 @@ export class StyleDoodleScene extends Phaser.Scene {
       this.unfreezeEnemies();
     }
 
-    if (!this.alive) return;
+    if (!this.alive) {
+      this.updateJarFill();
+      return;
+    }
 
     if (!this.isExploding && !this.isCinematic) {
       const dt = this.game.loop.delta ?? 16.6;
