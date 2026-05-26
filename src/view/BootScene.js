@@ -16,6 +16,6 @@ export class BootScene extends Phaser.Scene {
 
   create() {
     registerPixelTextures(this, CHARACTERS);
-    this.scene.start('MainMenuScene');
+    this.scene.start('StylePickerScene');
   }
 }
