@@ -4,7 +4,8 @@
  */
 import {
   ARENA, SURVIVAL,
-  setupMovementInput, readMovementInput, chasePlayer, randomEdgeSpawn,
+  setupMovementInput, readMovementInput,
+  chasePlayer, randomEdgeSpawn,
   scoreForCombo, comboTier, enemySpeedFor, spawnIntervalFor,
   killEnemiesStaggered,
   QUIPS_DOODLE, QUIPS_DEATH, pickQuip,
@@ -31,7 +32,9 @@ const PALETTE = {
 const CHARGE_FULL_MS = 6500;
 const CHARGE_MIN_RADIUS = 120;
 const CHARGE_MAX_RADIUS = 520;
+const CHARGE_MIN_TO_FIRE = 0.02;
 const CINEMATIC_MS = 700;
+const REPAIR_KILL_THRESHOLD = 30;
 const JAR_SCALE = 0.5;
 const JAR_W = 180;
 const JAR_H = 220;
@@ -104,7 +107,19 @@ function drawJarFrame(W, H, crackLevel, seed) {
   ctx.fill();
   ctx.restore();
 
-  // Intérieur transparent : la confiture est dessinée derrière le sprite (depth 19).
+  // Fenêtre transparente pour voir la confiture (graphics depth 19).
+  const cavityPts = [
+    [W * 0.24, H * 0.42], [W * 0.22, H * 0.62],
+    [W * 0.3, H * 0.84], [W * 0.5, H * 0.86],
+    [W * 0.7, H * 0.84], [W * 0.78, H * 0.62],
+    [W * 0.76, H * 0.42],
+  ];
+  ctx.save();
+  wobblyPath(ctx, cavityPts, 5, rand, true);
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fill();
+  ctx.restore();
+  ctx.globalCompositeOperation = 'source-over';
 
   ctx.save();
   ctx.strokeStyle = PALETTE.ink;
@@ -242,9 +257,8 @@ function buildWobbleAnim(scene, keyBase, drawFn, args) {
   const frames = [];
   seeds.forEach((s, i) => {
     const key = `${keyBase}-${i}`;
-    if (!scene.textures.exists(key)) {
-      scene.textures.addCanvas(key, drawFn(...args, s));
-    }
+    if (scene.textures.exists(key)) scene.textures.remove(key);
+    scene.textures.addCanvas(key, drawFn(...args, s));
     frames.push({ key });
   });
   const animKey = `${keyBase}-anim`;
@@ -311,6 +325,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     buildBlobTexture(this, `${KEY}-jam-light`, PALETTE.jamLight);
 
     setupMovementInput(this);
+    this.bindKeyboardActions();
 
     this.cameras.main.setBackgroundColor(PALETTE.paper);
     this.add.tileSprite(ARENA.width / 2, ARENA.height / 2, ARENA.width, ARENA.height, `${KEY}-paper`)
@@ -332,7 +347,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.invincibleUntil = 0;
     this.alive = true;
     this.startTime = this.time.now;
-    this.charge = 0;
+    this.charge = 0.12;
     this.isExploding = false;
     this.isCinematic = false;
 
@@ -340,7 +355,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.totalKillsInExplosions = 0;
     this.maxKillsInOneShot = 0;
 
-    this.jamFill = this.add.graphics().setDepth(19.5);
+    this.jamFill = this.add.graphics().setDepth(19);
 
     this.player = this.physics.add.sprite(ARENA.width / 2, ARENA.height / 2, this.jarAnim.firstKey);
     this.player.play(this.jarAnim.animKey);
@@ -384,9 +399,14 @@ export class StyleDoodleScene extends Phaser.Scene {
       fontSize: '22px', fontStyle: 'bold', color: PALETTE.uiText,
     }).setOrigin(1, 0).setDepth(100);
 
-    this.attackHint = this.add.text(ARENA.width - 28, 50, 'plein = toutes les tartines', {
+    this.attackHint = this.add.text(ARENA.width - 28, 50, 'plein = wipe · 30+ kills = réparation', {
       fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
-      fontSize: '14px', color: PALETTE.uiText,
+      fontSize: '13px', color: PALETTE.uiText,
+    }).setOrigin(1, 0).setDepth(100);
+
+    this.chargeLabel = this.add.text(ARENA.width - 28, 72, 'charge 0%', {
+      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
+      fontSize: '16px', fontStyle: 'bold', color: PALETTE.uiAccent,
     }).setOrigin(1, 0).setDepth(100);
 
     this.hudCombo = this.add.text(ARENA.width / 2, ARENA.height * 0.22, '', {
@@ -401,7 +421,63 @@ export class StyleDoodleScene extends Phaser.Scene {
     }).setOrigin(1, 1).setDepth(100);
 
     this.input.keyboard.once('keydown', () => this.ensureBgm());
-    this.input.keyboard.on('keydown-R', () => this.scene.restart());
+
+    this.explodeBtn = this.add.text(ARENA.width / 2, ARENA.height - 48, '[ SPACE ] exploser', {
+      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
+      fontSize: '20px', fontStyle: 'bold', color: PALETTE.uiAccent,
+      backgroundColor: '#f5efde', padding: { x: 12, y: 6 },
+    }).setOrigin(0.5).setDepth(100).setInteractive({ useHandCursor: true });
+    this.explodeBtn.on('pointerdown', () => {
+      this.ensureBgm();
+      this.tryExplode();
+    });
+  }
+
+  restartGame() {
+    if (this.scene.isActive()) this.scene.restart();
+  }
+
+  bindKeyboardActions() {
+    const canvas = this.game.canvas;
+    if (canvas) {
+      canvas.setAttribute('tabindex', '0');
+      canvas.style.outline = 'none';
+    }
+    this.input.on('pointerdown', () => {
+      canvas?.focus({ preventScroll: true });
+      if (this.input.keyboard) this.input.keyboard.enabled = true;
+    });
+    this.time.delayedCall(100, () => canvas?.focus({ preventScroll: true }));
+
+    const kb = this.input.keyboard;
+    if (!kb) return;
+
+    this._onSpaceDown = () => {
+      this.ensureBgm();
+      this.tryExplode();
+    };
+    this._onRestartDown = () => this.restartGame();
+
+    this.spaceKey?.off('down', this._onSpaceDown);
+    this.spaceKey?.on('down', this._onSpaceDown);
+    this.cursors?.space?.off('down', this._onSpaceDown);
+    this.cursors?.space?.on('down', this._onSpaceDown);
+
+    kb.off('keydown-SPACE', this._onSpaceDown);
+    kb.on('keydown-SPACE', this._onSpaceDown);
+
+    this.restartKey?.off('down', this._onRestartDown);
+    this.restartKey?.on('down', this._onRestartDown);
+    kb.off('keydown-R', this._onRestartDown);
+    kb.on('keydown-R', this._onRestartDown);
+
+    this.events.once('shutdown', () => {
+      this.spaceKey?.off('down', this._onSpaceDown);
+      this.cursors?.space?.off('down', this._onSpaceDown);
+      kb.off('keydown-SPACE', this._onSpaceDown);
+      this.restartKey?.off('down', this._onRestartDown);
+      kb.off('keydown-R', this._onRestartDown);
+    });
   }
 
   ensureBgm() {
@@ -434,27 +510,37 @@ export class StyleDoodleScene extends Phaser.Scene {
     const x = this.player.x;
     const y = this.player.y;
     const s = JAR_SCALE;
+    const halfH = (JAR_H * s) / 2;
 
+    const cavityBottom = y - halfH + JAR_H * 0.86 * s;
+    const cavityTop = y - halfH + JAR_H * 0.42 * s;
+    const fillTop = cavityBottom - (cavityBottom - cavityTop) * ratio;
     const innerLeft = x - 36 * s;
     const innerRight = x + 36 * s;
-    const innerBottom = y + 38 * s;
-    const innerTop = y - 8 * s;
-    const fillTop = innerBottom - (innerBottom - innerTop) * ratio;
+    const fillH = Math.max(0, cavityBottom - fillTop);
 
     this.jamFill.clear();
-    if (ratio <= 0.01) return;
+    if (fillH < 1) {
+      this.chargeLabel.setText(`charge ${Math.round(ratio * 100)}%`);
+      this.chargeLabel.setColor(PALETTE.uiAccent);
+      return;
+    }
 
-    this.jamFill.fillStyle(0xcc2244, 0.88);
-    this.jamFill.fillRoundedRect(
-      innerLeft, fillTop,
-      innerRight - innerLeft, innerBottom - fillTop,
-      8 * s,
-    );
-    this.jamFill.fillStyle(0xff5577, 0.45);
-    this.jamFill.fillEllipse(
-      x - 12 * s, fillTop + 10 * s,
-      24 * s, 8 * s,
-    );
+    const jamColor = ratio >= 0.999 ? 0xff3355 : 0xcc2244;
+    this.jamFill.fillStyle(jamColor, 0.92);
+    this.jamFill.fillRoundedRect(innerLeft, fillTop, innerRight - innerLeft, fillH, 6 * s);
+    this.jamFill.fillStyle(0xff5577, 0.5);
+    this.jamFill.fillEllipse(x, fillTop + fillH * 0.25, 28 * s, 10 * s);
+
+    if (ratio >= 0.999) {
+      this.chargeLabel.setText('PLEIN !');
+      this.chargeLabel.setColor('#ffaa00');
+      this.player.setTint(0xffeecc);
+    } else {
+      this.chargeLabel.setText(`charge ${Math.round(ratio * 100)}%`);
+      this.chargeLabel.setColor(PALETTE.uiAccent);
+      this.player.clearTint();
+    }
   }
 
   refreshJarAppearance() {
@@ -482,14 +568,42 @@ export class StyleDoodleScene extends Phaser.Scene {
   }
 
   tryExplode() {
-    if (!this.alive || this.isExploding) return;
-    if (this.charge <= 0.06) return;
+    if (!this.alive) return;
+    if (this.isExploding || this.isCinematic) return;
+    if (this.charge < CHARGE_MIN_TO_FIRE) {
+      this.popText(this.player.x, this.player.y - 70, 'pas encore chargé…');
+      return;
+    }
     this.doChargedExplosion();
+  }
+
+  tryRepairJar(killed) {
+    if (killed < REPAIR_KILL_THRESHOLD) return;
+    if (this.hp >= SURVIVAL.playerHp) return;
+
+    this.hp = SURVIVAL.playerHp;
+    this.refreshJarAppearance();
+    this.hudHp.setText('pot intact');
+    this.player.clearTint();
+    this.popBigText(this.player.x, this.player.y - 60, 'POT RÉPARÉ !');
+    this.cameras.main.flash(200, 200, 255, 180);
   }
 
   doChargedExplosion() {
     this.isExploding = true;
-    playJamExplosion(this);
+    this.explosionStartAt = this.time.now;
+
+    const finishExplosion = () => {
+      this.isCinematic = false;
+      this.isExploding = false;
+      this.unfreezeEnemies();
+    };
+
+    try {
+      playJamExplosion(this);
+    } catch {
+      // Audio optionnel — l'explosion visuelle continue.
+    }
 
     const jx = this.player.x; const jy = this.player.y;
     const isFull = this.charge >= 0.999;
@@ -502,28 +616,35 @@ export class StyleDoodleScene extends Phaser.Scene {
       angle: -25, duration: 120, yoyo: true,
     });
 
-    const splat1 = this.add.particles(jx, jy, `${KEY}-jam`, {
-      speed: { min: 280, max: 720 },
-      angle: { min: 0, max: 360 },
-      lifespan: 900,
-      scale: { start: 2.2, end: 0.4 },
-      alpha: { start: 0.95, end: 0 },
-      quantity: 36,
-      emitting: false,
-    }).setDepth(50);
-    splat1.explode(isFull ? 90 : 70);
+    let splat1; let splat2;
+    try {
+      splat1 = this.add.particles(jx, jy, `${KEY}-jam`, {
+        speed: { min: 280, max: 720 },
+        angle: { min: 0, max: 360 },
+        lifespan: 900,
+        scale: { start: 2.2, end: 0.4 },
+        alpha: { start: 0.95, end: 0 },
+        quantity: 36,
+        emitting: false,
+      }).setDepth(50);
+      splat1.explode(isFull ? 90 : 70);
 
-    const splat2 = this.add.particles(jx, jy, `${KEY}-jam-light`, {
-      speed: { min: 180, max: 520 },
-      angle: { min: 0, max: 360 },
-      lifespan: 700,
-      scale: { start: 1.2, end: 0 },
-      quantity: 20,
-      emitting: false,
-    }).setDepth(51);
-    splat2.explode(isFull ? 50 : 36);
-
-    this.time.delayedCall(1200, () => { splat1.destroy(); splat2.destroy(); });
+      splat2 = this.add.particles(jx, jy, `${KEY}-jam-light`, {
+        speed: { min: 180, max: 520 },
+        angle: { min: 0, max: 360 },
+        lifespan: 700,
+        scale: { start: 1.2, end: 0 },
+        quantity: 20,
+        emitting: false,
+      }).setDepth(51);
+      splat2.explode(isFull ? 50 : 36);
+    } catch {
+      splat1 = null;
+      splat2 = null;
+    }
+    if (splat1 || splat2) {
+      this.time.delayedCall(1200, () => { splat1?.destroy(); splat2?.destroy(); });
+    }
 
     const wave = this.add.circle(jx, jy, radius, 0xcc2244, isFull ? 0.5 : 0.35)
       .setDepth(48).setScale(0.05);
@@ -562,6 +683,8 @@ export class StyleDoodleScene extends Phaser.Scene {
       this.showCombo(killed, pts);
     }
 
+    this.tryRepairJar(killed);
+
     const label = isFull ? 'BOOM!' : 'SPLAT!';
     this.popBigText(jx, jy - 50, killed > 0 ? label : 'POUF');
 
@@ -569,11 +692,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.updateJarFill();
 
     const endCinematic = Math.max(CINEMATIC_MS, victims.length * 70 + 150);
-    this.time.delayedCall(endCinematic, () => {
-      this.isCinematic = false;
-      this.isExploding = false;
-      this.unfreezeEnemies();
-    });
+    this.time.delayedCall(endCinematic, finishExplosion, [], this);
   }
 
   killEnemy(e, fromX, fromY) {
@@ -661,6 +780,7 @@ export class StyleDoodleScene extends Phaser.Scene {
   die() {
     this.alive = false;
     this.enemySpawnEvent.remove();
+    this.explodeBtn?.setVisible(false);
 
     const dx0 = this.player.x; const dy0 = this.player.y;
     this.player.setVisible(false);
@@ -734,12 +854,31 @@ export class StyleDoodleScene extends Phaser.Scene {
       }).setOrigin(0.5).setDepth(202);
     });
 
-    this.add.text(cx, ARENA.height * 0.68, 'R rejouer', {
-      fontFamily: font, fontSize: '20px', color: PALETTE.uiText,
-    }).setOrigin(0.5).setDepth(202);
+    const restartBtn = this.add.text(cx, ARENA.height * 0.68, 'R ou clic — rejouer', {
+      fontFamily: font, fontSize: '20px', fontStyle: 'bold', color: PALETTE.uiAccent,
+      backgroundColor: '#ffffff', padding: { x: 14, y: 8 },
+    }).setOrigin(0.5).setDepth(202).setInteractive({ useHandCursor: true });
+    restartBtn.on('pointerdown', () => this.restartGame());
+
+    this.add.zone(cx, ARENA.height / 2, ARENA.width, ARENA.height)
+      .setInteractive()
+      .setDepth(199)
+      .on('pointerdown', () => this.restartGame());
   }
 
   update() {
+    if (this.spaceKey && Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
+      this.ensureBgm();
+      this.tryExplode();
+    }
+
+    if (this.isExploding && this.explosionStartAt
+      && this.time.now - this.explosionStartAt > 4000) {
+      this.isExploding = false;
+      this.isCinematic = false;
+      this.unfreezeEnemies();
+    }
+
     if (!this.alive) return;
 
     if (!this.isExploding && !this.isCinematic) {
@@ -750,11 +889,6 @@ export class StyleDoodleScene extends Phaser.Scene {
     const { vx, vy } = readMovementInput(this);
     const speed = 230;
     this.player.body.setVelocity(vx * speed, vy * speed);
-
-    if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-      this.ensureBgm();
-      this.tryExplode();
-    }
 
     this.updateJarFill();
 

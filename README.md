@@ -21,8 +21,9 @@ npm run dev
 
 ## Mécanique
 
-- **Charge** : le pot se remplit visuellement de confiture (0 → 100 %)
+- **Charge** : la confiture monte dans le pot (0 → 100 %, affichage « PLEIN ! »)
 - **Explosion partielle** : rayon proportionnel à la charge
 - **Explosion pleine** : toutes les tartines du plateau
 - **2 PV** : 1ère touche = pot fêlé, 2ème = pot cassé + game over
+- **Réparation** : 30+ tartines tuées en un coup réparent le pot
 - **Fin de partie** : score, max tartines en 1 coup, moyenne par coup
