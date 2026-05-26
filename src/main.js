@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { BootScene } from './view/BootScene.js';
+import { TitleScene } from './view/TitleScene.js';
 import { StyleDoodleScene } from './view/styles/StyleDoodle.js';
 
 new Phaser.Game({
@@ -18,5 +19,5 @@ new Phaser.Game({
     default: 'arcade',
     arcade: { gravity: { y: 0 }, debug: false },
   },
-  scene: [BootScene, StyleDoodleScene],
+  scene: [BootScene, TitleScene, StyleDoodleScene],
 });

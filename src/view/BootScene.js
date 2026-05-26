@@ -10,6 +10,6 @@ export class BootScene extends Phaser.Scene {
   }
 
   create() {
-    this.scene.start('StyleDoodle');
+    this.scene.start('TitleScene');
   }
 }

@@ -11,6 +11,9 @@ import {
   QUIPS_DOODLE, QUIPS_DEATH, pickQuip,
   playJamExplosion,
 } from './sharedSurvival.js';
+import {
+  getJamFlavor, setActiveJamPalette, activeJamPalette, DEFAULT_JAM_ID,
+} from '../jamFlavors.js';
 
 const KEY = 'StyleDoodle';
 
@@ -35,6 +38,17 @@ const CHARGE_MAX_RADIUS = 520;
 const CHARGE_MIN_TO_FIRE = 0.02;
 const CINEMATIC_MS = 700;
 const REPAIR_KILL_THRESHOLD = 20;
+const BOSS_KILL_THRESHOLD = 15;
+const BOSS_SURVIVE_MS = 52000;
+const BOSS_EJECT_INTERVAL_MS = 1250;
+const BOSS_BURST_EVERY = 5;
+const BOSS_SPLASH_HOLD_MS = 4200;
+const BOSS_SPLASH_FADE_IN_MS = 550;
+const BOSS_SPLASH_FADE_OUT_MS = 700;
+const BOSS_INTRO_MAX_RETRIES = 150;
+const MAX_BOSS_HAZARDS = 36;
+const TOASTER_W = 300;
+const TOASTER_H = 260;
 const JAR_SCALE = 0.5;
 const JAR_W = 180;
 const JAR_H = 220;
@@ -138,7 +152,7 @@ function drawJarFrame(W, H, crackLevel, seed) {
   ];
   ctx.save();
   wobblyPath(ctx, lidPts, 4, rand, true);
-  ctx.fillStyle = PALETTE.jam;
+  ctx.fillStyle = activeJamPalette.jam;
   ctx.fill();
   ctx.strokeStyle = PALETTE.ink;
   ctx.lineWidth = 4.5;
@@ -205,6 +219,308 @@ function drawToastFromImage(scene, W, H, seed) {
   ctx.rotate(tilt);
   ctx.drawImage(src, -iw / 2, -ih / 2, iw, ih);
   ctx.restore();
+
+  return canvas;
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  const rad = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.lineTo(x + w - rad, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+  ctx.lineTo(x + w, y + h - rad);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  ctx.lineTo(x + rad, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+  ctx.lineTo(x, y + rad);
+  ctx.quadraticCurveTo(x, y, x + rad, y);
+  ctx.closePath();
+}
+
+/** Le Grille-Pain Titan — boss doodle chrome + confiture. */
+function drawToasterFrame(W, H, seed) {
+  const { canvas, ctx } = makeCanvas(W, H);
+  const rand = rng(seed);
+  const ink = PALETTE.ink;
+  const rage = activeJamPalette.uiAccent;
+  const rageFill = activeJamPalette.jam;
+
+  ctx.fillStyle = 'rgba(40,30,20,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(W / 2, H * 0.95, W * 0.48, H * 0.05, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const bx = W * 0.07;
+  const by = H * 0.15;
+  const bw = W * 0.76;
+  const bh = H * 0.71;
+
+  const bodyPts = [
+    [bx, by + bh * 0.1], [bx, by + bh * 0.9], [bx + bw * 0.07, by + bh],
+    [bx + bw * 0.93, by + bh], [bx + bw, by + bh * 0.9],
+    [bx + bw, by + bh * 0.1], [bx + bw * 0.93, by - H * 0.01], [bx + bw * 0.07, by - H * 0.01],
+  ];
+  const bodyGrad = ctx.createLinearGradient(bx, by, bx + bw, by + bh);
+  bodyGrad.addColorStop(0, '#fffef8');
+  bodyGrad.addColorStop(0.2, '#f2f0ec');
+  bodyGrad.addColorStop(0.5, '#d8d6e4');
+  bodyGrad.addColorStop(1, '#9e9eb0');
+  ctx.save();
+  wobblyPath(ctx, bodyPts, 6, rand, true);
+  ctx.fillStyle = bodyGrad;
+  ctx.fill();
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 6;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  wobblyPath(ctx, bodyPts, 4, rand, true);
+  ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  wobblyPath(ctx, bodyPts, 8, rand, true);
+  ctx.strokeStyle = 'rgba(42,24,16,0.12)';
+  ctx.lineWidth = 10;
+  ctx.stroke();
+  ctx.restore();
+
+  const stripeY = by + bh * 0.38;
+  ctx.save();
+  ctx.strokeStyle = rage;
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 5;
+  ctx.setLineDash([10, 8]);
+  ctx.beginPath();
+  ctx.moveTo(bx + bw * 0.1, stripeY);
+  ctx.lineTo(bx + bw * 0.9, stripeY + (rand() - 0.5) * 4);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  for (const side of [0.04, 0.96]) {
+    const px = bx + bw * side;
+    ctx.fillStyle = '#b8b8c8';
+    roundRectPath(ctx, px - (side < 0.5 ? bw * 0.05 : 0), by + bh * 0.15, bw * 0.05, bh * 0.7, 4);
+    ctx.fill();
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    for (let r = 0; r < 3; r++) {
+      const ry = by + bh * (0.28 + r * 0.22);
+      ctx.fillStyle = '#888898';
+      ctx.beginPath();
+      ctx.arc(px + bw * (side < 0.5 ? 0.025 : -0.025), ry, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+
+  const crownPts = [
+    [bx + bw * 0.06, by + H * 0.02], [bx + bw * 0.94, by + H * 0.02],
+    [bx + bw * 0.9, by - H * 0.02], [bx + bw * 0.5, by - H * 0.06],
+    [bx + bw * 0.1, by - H * 0.02],
+  ];
+  ctx.save();
+  wobblyPath(ctx, crownPts, 3, rand, true);
+  ctx.fillStyle = '#e8e8f2';
+  ctx.fill();
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+  ctx.restore();
+
+  for (let i = 0; i < 5; i++) {
+    const sx = bx + bw * (0.18 + i * 0.16) + (rand() - 0.5) * 8;
+    const sy = by - H * 0.06 - i * 5;
+    ctx.fillStyle = `rgba(255,200,140,${0.15 + rand() * 0.15})`;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy - 6, 8 + rand() * 6, 12 + rand() * 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(255,100,40,${0.3 + rand() * 0.25})`;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(sx, sy + 10);
+    ctx.quadraticCurveTo(sx + (rand() - 0.5) * 10, sy - 6, sx + (rand() - 0.5) * 12, sy - 22 - rand() * 12);
+    ctx.stroke();
+  }
+
+  const slotW = bw * 0.36;
+  const slotH = H * 0.19;
+  const slotY = by + H * 0.04;
+  const slotGap = bw * 0.05;
+  const slotXs = [
+    bx + bw * 0.5 - slotGap / 2 - slotW,
+    bx + bw * 0.5 + slotGap / 2,
+  ];
+
+  slotXs.forEach((sx, i) => {
+    ctx.fillStyle = '#0a0808';
+    roundRectPath(ctx, sx, slotY, slotW, slotH, 6);
+    ctx.fill();
+    const glow = ctx.createLinearGradient(sx, slotY, sx, slotY + slotH);
+    glow.addColorStop(0, '#fff4a8');
+    glow.addColorStop(0.35, '#ff9933');
+    glow.addColorStop(0.7, '#ff4400');
+    glow.addColorStop(1, '#aa2200');
+    roundRectPath(ctx, sx + 6, slotY + 6, slotW - 12, slotH - 12, 4);
+    ctx.fillStyle = glow;
+    ctx.fill();
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 2.5;
+    roundRectPath(ctx, sx, slotY, slotW, slotH, 6);
+    ctx.stroke();
+
+    const peek = [
+      [sx + slotW * 0.18, slotY - H * 0.03],
+      [sx + slotW * 0.12, slotY + slotH * 0.4],
+      [sx + slotW * 0.88, slotY + slotH * 0.42],
+      [sx + slotW * 0.82, slotY - H * 0.02],
+    ];
+    ctx.save();
+    wobblyPath(ctx, peek, 4, rand, true);
+    ctx.fillStyle = PALETTE.toast;
+    ctx.fill();
+    ctx.fillStyle = PALETTE.crust;
+    ctx.globalAlpha = 0.35;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  ctx.fillStyle = 'rgba(60,50,40,0.35)';
+  roundRectPath(ctx, bx + bw * 0.06, by + bh * 0.88, bw * 0.88, H * 0.07, 4);
+  ctx.fill();
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  const leverX = bx + bw + 2;
+  const leverY = by + bh * 0.28;
+  ctx.fillStyle = '#6a6a78';
+  roundRectPath(ctx, leverX, leverY, W * 0.08, bh * 0.42, 5);
+  ctx.fill();
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.fillStyle = rageFill;
+  roundRectPath(ctx, leverX - 4, leverY + bh * 0.05, W * 0.11, bh * 0.22, 6);
+  ctx.fill();
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.globalAlpha = 0.4;
+  roundRectPath(ctx, leverX - 2, leverY + bh * 0.07, W * 0.05, bh * 0.08, 3);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  for (let d = 0; d < 3; d++) {
+    ctx.fillStyle = rageFill;
+    ctx.globalAlpha = 0.5 - d * 0.12;
+    ctx.beginPath();
+    ctx.ellipse(leverX + W * 0.02, leverY + bh * 0.28 + d * 9, 4, 6, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.fillStyle = '#4a4a58';
+  roundRectPath(ctx, bx + bw * 0.12, by + bh * 0.72, W * 0.11, H * 0.055, 4);
+  ctx.fill();
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.fillStyle = '#ff6622';
+  ctx.beginPath();
+  ctx.arc(bx + bw * 0.175, by + bh * 0.747, W * 0.028, 0, Math.PI * 2);
+  ctx.fill();
+
+  const eyeY = by + bh * 0.58;
+  const eyeRX = bx + bw * 0.34;
+  const eyeLX = bx + bw * 0.66;
+  const eyeR = W * 0.048;
+
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(eyeLX - eyeR * 1.4, eyeY - eyeR * 2.2);
+  ctx.lineTo(eyeLX - eyeR * 0.3, eyeY - eyeR * 1.5);
+  ctx.moveTo(eyeRX + eyeR * 1.4, eyeY - eyeR * 2.2);
+  ctx.lineTo(eyeRX + eyeR * 0.3, eyeY - eyeR * 1.5);
+  ctx.stroke();
+
+  for (const ex of [eyeRX, eyeLX]) {
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(ex, eyeY, eyeR * 1.1, eyeR * 1.25, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = rage;
+    ctx.beginPath();
+    ctx.arc(ex + (ex < W / 2 ? 2 : -2), eyeY + 1, eyeR * 0.55, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = ink;
+    ctx.beginPath();
+    ctx.arc(ex + (ex < W / 2 ? 4 : -4), eyeY - 2, eyeR * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 4.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(bx + bw * 0.36, by + bh * 0.78);
+  ctx.quadraticCurveTo(bx + bw * 0.5, by + bh * 0.92, bx + bw * 0.64, by + bh * 0.78);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(bx + bw * 0.42, by + bh * 0.8);
+  ctx.lineTo(bx + bw * 0.46, by + bh * 0.86);
+  ctx.moveTo(bx + bw * 0.54, by + bh * 0.8);
+  ctx.lineTo(bx + bw * 0.58, by + bh * 0.86);
+  ctx.stroke();
+
+  const labelY = by + bh * 0.5;
+  const labelX = bx + bw * 0.5;
+  ctx.font = `bold ${Math.round(W * 0.07)}px "Comic Sans MS", "Marker Felt", cursive`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = ink;
+  ctx.lineJoin = 'round';
+  ctx.strokeText('TITAN', labelX, labelY);
+  ctx.fillStyle = PALETTE.paper;
+  ctx.fillText('TITAN', labelX, labelY);
+  ctx.fillStyle = rage;
+  ctx.globalAlpha = 0.25;
+  ctx.fillText('TITAN', labelX + 1, labelY + 1);
+  ctx.globalAlpha = 1;
+
+  for (let i = 0; i < 8; i++) {
+    ctx.fillStyle = `rgba(232,184,96,${0.2 + rand() * 0.25})`;
+    ctx.beginPath();
+    ctx.arc(
+      bx + bw * (0.15 + rand() * 0.7),
+      by + bh * (0.2 + rand() * 0.65),
+      1.5 + rand() * 2,
+      0, Math.PI * 2,
+    );
+    ctx.fill();
+  }
 
   return canvas;
 }
@@ -305,13 +621,27 @@ function buildPaperTexture(scene, key) {
 export class StyleDoodleScene extends Phaser.Scene {
   constructor() { super({ key: KEY }); }
 
+  init(data) {
+    const id = data?.flavorId ?? this.registry.get('jamFlavor') ?? DEFAULT_JAM_ID;
+    this.flavor = getJamFlavor(id);
+    this.registry.set('jamFlavor', this.flavor.id);
+    setActiveJamPalette(this.flavor);
+    this._chargeLabelKey = '';
+    this.jamColor = Phaser.Display.Color.HexStringToColor(this.flavor.jam).color;
+    this.jamLightColor = Phaser.Display.Color.HexStringToColor(this.flavor.jamLight).color;
+    this.jamAccent = this.flavor.uiAccent;
+  }
+
   create() {
     buildPaperTexture(this, `${KEY}-paper`);
     this.jarAnim = buildWobbleAnim(this, `${KEY}-jar`, drawJarFrame, [JAR_W, JAR_H, 0]);
     this.jarFracturedAnim = buildWobbleAnim(this, `${KEY}-jar-fractured`, drawJarFrame, [JAR_W, JAR_H, 1]);
     this.toastAnim = buildWobbleAnim(this, `${KEY}-toast`, drawToastFromImage, [this, 130, 130]);
-    buildBlobTexture(this, `${KEY}-jam`, PALETTE.jam);
-    buildBlobTexture(this, `${KEY}-jam-light`, PALETTE.jamLight);
+    this.toasterAnim = buildWobbleAnim(this, `${KEY}-toaster`, drawToasterFrame, [TOASTER_W, TOASTER_H]);
+    if (this.textures.exists(`${KEY}-jam`)) this.textures.remove(`${KEY}-jam`);
+    if (this.textures.exists(`${KEY}-jam-light`)) this.textures.remove(`${KEY}-jam-light`);
+    buildBlobTexture(this, `${KEY}-jam`, this.flavor.jam);
+    buildBlobTexture(this, `${KEY}-jam-light`, this.flavor.jamLight);
 
     setupMovementInput(this);
     this.bindKeyboardActions();
@@ -343,6 +673,14 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.explosionCount = 0;
     this.totalKillsInExplosions = 0;
     this.maxKillsInOneShot = 0;
+    this.totalToastKills = 0;
+    this.bossTriggered = false;
+    this.bossPhase = null;
+    this.boss = null;
+    this.bossEjectEvent = null;
+    this.bossPhaseEndsAt = 0;
+    this.bossEjectSlot = 0;
+    this._bossTimerKey = '';
 
     this.jamFill = this.add.graphics().setDepth(19);
     this.jarFx = this.add.graphics().setDepth(22);
@@ -364,7 +702,9 @@ export class StyleDoodleScene extends Phaser.Scene {
     });
 
     this.enemies = this.physics.add.group();
+    this.bossHazards = this.physics.add.group();
     this.physics.add.overlap(this.player, this.enemies, () => this.hitPlayer());
+    this.physics.add.overlap(this.player, this.bossHazards, () => this.hitPlayer());
 
     this.enemySpawnEvent = this.time.addEvent({
       delay: SURVIVAL.enemySpawnStartMs,
@@ -387,19 +727,30 @@ export class StyleDoodleScene extends Phaser.Scene {
       fontSize: '18px', color: PALETTE.uiAccent,
     }).setDepth(100);
 
+    this.hudKills = this.add.text(28, 112, `tartines : 0 / ${BOSS_KILL_THRESHOLD}`, {
+      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
+      fontSize: '16px', color: PALETTE.uiText,
+    }).setDepth(100);
+
+    this.hudBossTimer = this.add.text(ARENA.width / 2, 28, '', {
+      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
+      fontSize: '28px', fontStyle: 'bold', color: '#cc4400',
+      stroke: '#ffffff', strokeThickness: 4,
+    }).setOrigin(0.5, 0).setDepth(102).setAlpha(0);
+
     this.attackLabel = this.add.text(ARENA.width - 28, 22, 'SPACE = exploser', {
       fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
       fontSize: '22px', fontStyle: 'bold', color: PALETTE.uiText,
     }).setOrigin(1, 0).setDepth(100);
 
-    this.attackHint = this.add.text(ARENA.width - 28, 50, 'plein = wipe · 20+ kills = réparation', {
+    this.attackHint = this.add.text(ARENA.width - 28, 50, `plein = wipe · ${BOSS_KILL_THRESHOLD} tartines = boss`, {
       fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
       fontSize: '13px', color: PALETTE.uiText,
     }).setOrigin(1, 0).setDepth(100);
 
     this.chargeLabel = this.add.text(ARENA.width - 28, 72, 'charge 0%', {
       fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
-      fontSize: '16px', fontStyle: 'bold', color: PALETTE.uiAccent,
+      fontSize: '16px', fontStyle: 'bold', color: this.jamAccent,
     }).setOrigin(1, 0).setDepth(100);
 
     this.hudCombo = this.add.text(ARENA.width / 2, ARENA.height * 0.22, '', {
@@ -424,10 +775,12 @@ export class StyleDoodleScene extends Phaser.Scene {
       this.ensureBgm();
       this.tryExplode();
     });
+
   }
 
   restartGame() {
-    this.scene.restart();
+    const flavorId = this.flavor?.id ?? this.registry.get('jamFlavor') ?? DEFAULT_JAM_ID;
+    this.scene.restart({ flavorId });
   }
 
   bindKeyboardActions() {
@@ -477,6 +830,8 @@ export class StyleDoodleScene extends Phaser.Scene {
     window.addEventListener('keydown', this._windowKeyHandler);
 
     this.events.once('shutdown', () => {
+      this.enemySpawnEvent?.remove();
+      this.bossEjectEvent?.remove();
       this.spaceKey?.off('down', this._onSpaceDown);
       this.cursors?.space?.off('down', this._onSpaceDown);
       kb.off('keydown-SPACE', this._onSpaceDown);
@@ -493,18 +848,27 @@ export class StyleDoodleScene extends Phaser.Scene {
   }
 
   freezeEnemies() {
-    this.enemies.children.iterate((e) => {
-      if (!e?.active || !e.body) return;
-      e.body.setVelocity(0, 0);
-      e.setData('frozen', true);
-    });
+    const freeze = (obj) => {
+      if (!obj?.active || !obj.body) return;
+      obj.body.setVelocity(0, 0);
+      obj.setData('frozen', true);
+    };
+    this.enemies.children.iterate(freeze);
+    this.bossHazards.children.iterate(freeze);
+    if (this.boss?.active && this.boss.body) {
+      this.boss.body.setVelocity(0, 0);
+      this.boss.setData('frozen', true);
+    }
   }
 
   unfreezeEnemies() {
-    this.enemies.children.iterate((e) => {
-      if (!e?.active) return;
-      e.setData('frozen', false);
-    });
+    const thaw = (obj) => {
+      if (!obj?.active) return;
+      obj.setData('frozen', false);
+    };
+    this.enemies.children.iterate(thaw);
+    this.bossHazards.children.iterate(thaw);
+    if (this.boss?.active) this.boss.setData('frozen', false);
   }
 
   drawJarCracks() {
@@ -564,6 +928,14 @@ export class StyleDoodleScene extends Phaser.Scene {
     }
   }
 
+  syncChargeLabel(ratio) {
+    const key = ratio >= 0.999 ? 'full' : `${Math.round(ratio * 100)}`;
+    if (key === this._chargeLabelKey) return;
+    this._chargeLabelKey = key;
+    this.chargeLabel.setText(key === 'full' ? 'PLEIN !' : `charge ${key}%`);
+    this.chargeLabel.setColor(this.jamAccent);
+  }
+
   updateJarFill() {
     if (!this.player.visible) {
       this.jamFill.clear();
@@ -573,6 +945,9 @@ export class StyleDoodleScene extends Phaser.Scene {
     }
 
     const ratio = Phaser.Math.Clamp(this.charge, 0, 1);
+    this.syncChargeLabel(ratio);
+    const x = this.player.x;
+    const y = this.player.y;
     const s = JAR_SCALE;
     const worldPoly = jarPolyWorld(this.player, s);
     const ys = worldPoly.map((p) => p.y);
@@ -584,38 +959,35 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.jarFx.clear();
     this.drawJarCracks();
 
-    if (ratio >= 0.01) {
-      const clipped = clipPolygonAtMinY(worldPoly, surfaceY);
-      if (clipped.length >= 3) {
-        const jamColor = ratio >= 0.999 ? 0xff3355 : 0xcc2244;
-        this.jamFill.fillStyle(jamColor, 0.94);
-        this.jamFill.beginPath();
-        this.jamFill.moveTo(clipped[0].x, clipped[0].y);
-        for (let i = 1; i < clipped.length; i++) {
-          this.jamFill.lineTo(clipped[i].x, clipped[i].y);
-        }
-        this.jamFill.closePath();
-        this.jamFill.fillPath();
+    if (ratio < 0.01) {
+      this.player.clearTint();
+      return;
+    }
 
-        const surfacePts = clipped.filter((p) => Math.abs(p.y - surfaceY) < 3 * s);
-        const surfX = surfacePts.length
-          ? surfacePts.reduce((a, p) => a + p.x, 0) / surfacePts.length
-          : this.player.x;
-        this.jamFill.fillStyle(0xff5577, 0.55);
-        this.jamFill.fillEllipse(surfX, surfaceY + 3 * s, 34 * s, 11 * s);
+    const clipped = clipPolygonAtMinY(worldPoly, surfaceY);
+    if (clipped.length >= 3) {
+      const jamColor = ratio >= 0.999 ? this.jamLightColor : this.jamColor;
+      this.jamFill.fillStyle(jamColor, 0.94);
+      this.jamFill.beginPath();
+      this.jamFill.moveTo(clipped[0].x, clipped[0].y);
+      for (let i = 1; i < clipped.length; i++) {
+        this.jamFill.lineTo(clipped[i].x, clipped[i].y);
       }
+      this.jamFill.closePath();
+      this.jamFill.fillPath();
+
+      const surfacePts = clipped.filter((p) => Math.abs(p.y - surfaceY) < 2 * s);
+      const surfX = surfacePts.length
+        ? surfacePts.reduce((a, p) => a + p.x, 0) / surfacePts.length
+        : x;
+      this.jamFill.fillStyle(this.jamLightColor, 0.55);
+      this.jamFill.fillEllipse(surfX, surfaceY + 3 * s, 34 * s, 11 * s);
+      this.jamFill.fillStyle(this.jamLightColor, 0.35);
+      this.jamFill.fillEllipse(surfX - 8 * s, surfaceY + 5 * s, 12 * s, 5 * s);
     }
 
-    if (ratio >= 0.999) {
-      this.chargeLabel.setText('PLEIN !');
-      this.chargeLabel.setColor(PALETTE.uiAccent);
-      this.player.clearTint();
-      this.drawJamOverflow(this.player.x, this.player.y, this.time.now);
-    } else {
-      this.chargeLabel.setText(`charge ${Math.round(ratio * 100)}%`);
-      this.chargeLabel.setColor(PALETTE.uiAccent);
-      this.player.clearTint();
-    }
+    this.player.clearTint();
+    if (ratio >= 0.999) this.drawJamOverflow(x, y, this.time.now);
   }
 
   refreshJarAppearance() {
@@ -629,7 +1001,7 @@ export class StyleDoodleScene extends Phaser.Scene {
   }
 
   spawnEnemy() {
-    if (!this.alive || this.isCinematic) return;
+    if (!this.alive || this.isCinematic || this.bossPhase) return;
     const pos = randomEdgeSpawn();
     const e = this.enemies.create(pos.x, pos.y, this.toastAnim.firstKey);
     e.play(this.toastAnim.animKey);
@@ -642,6 +1014,320 @@ export class StyleDoodleScene extends Phaser.Scene {
       duration: 320, yoyo: true, repeat: -1,
     });
     this.enemySpawnEvent.delay = spawnIntervalFor(this.time.now - this.startTime);
+  }
+
+  registerToastKill() {
+    this.totalToastKills += 1;
+    this.hudKills?.setText(`tartines : ${this.totalToastKills} / ${BOSS_KILL_THRESHOLD}`);
+    if (!this.bossTriggered && this.totalToastKills >= BOSS_KILL_THRESHOLD) {
+      this.bossTriggered = true;
+      this.scheduleBossIntro();
+    }
+  }
+
+  scheduleBossIntro() {
+    let retries = 0;
+    const tryStart = () => {
+      if (!this.alive || this.bossPhase) return;
+      if (this.isCinematic || this.isExploding) {
+        if (retries++ >= BOSS_INTRO_MAX_RETRIES) return;
+        this.time.delayedCall(200, tryStart);
+        return;
+      }
+      this.startBossIntro();
+    };
+    tryStart();
+  }
+
+  startBossIntro() {
+    this.bossPhase = 'intro';
+    this.isCinematic = true;
+    this.enemySpawnEvent.paused = true;
+    this.freezeEnemies();
+
+    const victims = [];
+    this.enemies.children.iterate((e) => { if (e?.active) victims.push(e); });
+    killEnemiesStaggered(this, victims, ARENA.width / 2, ARENA.height / 2, 40);
+
+    this.showSplashText('THIS IS THE BOSS', {
+      holdMs: BOSS_SPLASH_HOLD_MS,
+      fadeInMs: BOSS_SPLASH_FADE_IN_MS,
+      fadeOutMs: BOSS_SPLASH_FADE_OUT_MS,
+      fontSize: 84,
+      onComplete: () => {
+        if (!this.alive) return;
+        this.popBigText(ARENA.width / 2, ARENA.height * 0.32, 'LE GRILLE-PAIN\nTITAN !');
+        this.time.delayedCall(1100, () => {
+          if (!this.alive) return;
+          this.isCinematic = false;
+          this.unfreezeEnemies();
+          this.spawnBoss();
+        });
+      },
+    });
+  }
+
+  spawnBoss() {
+    this.bossPhase = 'active';
+    const cx = ARENA.width / 2;
+    const cy = ARENA.height * 0.38;
+
+    this.boss = this.physics.add.sprite(cx, cy - 140, this.toasterAnim.firstKey);
+    this.boss.play(this.toasterAnim.animKey);
+    this.boss.body.setSize(TOASTER_W * 0.68, TOASTER_H * 0.62);
+    this.boss.body.setOffset(TOASTER_W * 0.16, TOASTER_H * 0.2);
+    this.bossEjectSlot = 0;
+    this.bossEjectCount = 0;
+    this.boss.setDepth(25);
+    this.boss.setData('isBoss', true);
+    this.boss.setScale(1.18);
+
+    this.bossAura = this.add.graphics().setDepth(24);
+    this.bossHeat = this.add.graphics().setDepth(26);
+
+    this.tweens.add({
+      targets: this.boss,
+      y: cy,
+      duration: 700,
+      ease: 'Bounce.easeOut',
+    });
+
+    this.physics.add.overlap(this.player, this.boss, () => this.hitPlayer());
+
+    this.tweens.add({
+      targets: this.boss,
+      scaleX: 1.2,
+      scaleY: 1.16,
+      duration: 280,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    this.bossPhaseEndsAt = this.time.now + BOSS_SURVIVE_MS;
+    const surviveSec = Math.round(BOSS_SURVIVE_MS / 1000);
+    const sm = Math.floor(surviveSec / 60);
+    const ss = surviveSec % 60;
+    const surviveLabel = sm > 0
+      ? `${sm}:${ss < 10 ? '0' : ''}${ss}`
+      : `0:${ss < 10 ? '0' : ''}${ss}`;
+    this.hudBossTimer.setAlpha(1);
+    this.hudBossTimer.setText(`Survis : ${surviveLabel}`);
+    this.attackHint.setText(`esquive les tartines — ${surviveSec} s`);
+
+    this.popBigText(cx, cy - 80, `SURVIS ${surviveSec} S !`);
+
+    this.bossEjectEvent = this.time.addEvent({
+      delay: BOSS_EJECT_INTERVAL_MS,
+      loop: true,
+      callback: () => {
+        this.bossEjectCount += 1;
+        const burst = this.bossEjectCount % BOSS_BURST_EVERY === 0;
+        this.bossEjectToast(burst);
+      },
+    });
+    this.time.delayedCall(600, () => this.bossEjectToast(false));
+  }
+
+  drawBossAura(rage) {
+    if (!this.bossAura || !this.boss?.active) return;
+    const g = this.bossAura;
+    g.clear();
+    const pulse = 0.55 + 0.2 * Math.sin(this.time.now / 200);
+    const bx = this.boss.x;
+    const by = this.boss.y + 10;
+    const rw = this.boss.displayWidth * 0.58;
+    const rh = this.boss.displayHeight * 0.28;
+    g.fillStyle(rage, 0.1 * pulse);
+    g.fillEllipse(bx, by, rw * 2.1, rh * 2.2);
+    g.lineStyle(3, rage, 0.2 * pulse);
+    g.strokeEllipse(bx, by, rw * 1.95, rh * 2);
+    g.lineStyle(2, 0x2a1810, 0.08);
+    g.strokeEllipse(bx, by, rw * 2.35, rh * 2.4);
+  }
+
+  ejectToastFromSlot(slotIdx, rageT) {
+    if (this.bossHazards.countActive(true) >= MAX_BOSS_HAZARDS) return;
+
+    const s = this.boss.scaleX;
+    const slotOffsetX = slotIdx === 0 ? -52 * s : 52 * s;
+    const mouthY = this.boss.y - this.boss.displayHeight * 0.36;
+    const spawnX = this.boss.x + slotOffsetX;
+    const spawnY = mouthY - 32;
+
+    const toast = this.bossHazards.create(spawnX, spawnY, this.toastAnim.firstKey);
+    toast.play(this.toastAnim.animKey);
+    toast.setScale(0.46 + rageT * 0.06);
+    toast.body.setCircle(36, 22, 22);
+    toast.setDepth(16);
+    toast.setData('isProjectile', true);
+
+    const spread = Phaser.Math.DegToRad(Phaser.Math.Between(-7, 7));
+    const angle = Phaser.Math.Angle.Between(spawnX, mouthY, this.player.x, this.player.y) + spread;
+    const spd = Phaser.Math.Between(215, 250) + rageT * 50;
+
+    toast.setAngle(Phaser.Math.RadToDeg(angle) + 90);
+    toast.body.setVelocity(0, 0);
+    this.tweens.add({
+      targets: toast,
+      y: mouthY,
+      duration: 150,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        if (!toast?.active) return;
+        toast.body.setVelocity(Math.cos(angle) * spd, Math.sin(angle) * spd);
+      },
+    });
+
+    this.time.delayedCall(4200, () => { if (toast?.active) toast.destroy(); });
+  }
+
+  bossEjectToast(burst = false) {
+    if (this.bossPhase !== 'active' || !this.boss?.active) return;
+
+    const elapsed = this.time.now - (this.bossPhaseEndsAt - BOSS_SURVIVE_MS);
+    const rageT = Phaser.Math.Clamp(elapsed / BOSS_SURVIVE_MS, 0, 1);
+
+    this.tweens.add({
+      targets: this.boss,
+      scaleY: 0.92,
+      duration: 70,
+      yoyo: true,
+      ease: 'Quad.easeOut',
+    });
+
+    if (this.bossHeat) {
+      this.bossHeat.clear();
+      this.bossHeat.fillStyle(0xff6622, 0.35 + rageT * 0.25);
+      this.bossHeat.fillEllipse(
+        this.boss.x, this.boss.y - this.boss.displayHeight * 0.32,
+        this.boss.displayWidth * 0.7, 28,
+      );
+      this.time.delayedCall(140, () => this.bossHeat?.clear());
+    }
+
+    if (burst) {
+      this.ejectToastFromSlot(0, rageT);
+      this.time.delayedCall(130, () => this.ejectToastFromSlot(1, rageT));
+      this.cameras.main.shake(100, 0.006);
+    } else {
+      const slotIdx = this.bossEjectSlot ?? 0;
+      this.bossEjectSlot = 1 - slotIdx;
+      this.ejectToastFromSlot(slotIdx, rageT);
+      this.cameras.main.shake(70, 0.004);
+    }
+  }
+
+  updateBoss() {
+    if (this.bossPhase !== 'active' || !this.boss?.active) return;
+    if (this.boss.getData('frozen')) return;
+
+    const elapsed = this.time.now - (this.bossPhaseEndsAt - BOSS_SURVIVE_MS);
+    const t = Phaser.Math.Clamp(elapsed / BOSS_SURVIVE_MS, 0, 1);
+    const bossSpeed = 72 + t * 105;
+    chasePlayer(this.boss, this.player, bossSpeed);
+    this.drawBossAura(this.jamColor);
+
+    const leftMs = Math.max(0, this.bossPhaseEndsAt - this.time.now);
+    const sec = Math.ceil(leftMs / 1000);
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    const timerKey = `${m}:${s}`;
+    if (timerKey !== this._bossTimerKey) {
+      this._bossTimerKey = timerKey;
+      this.hudBossTimer.setText(`Survis : ${m}:${s < 10 ? '0' : ''}${s}`);
+    }
+
+    if (leftMs <= 0) this.finishBossVictory();
+  }
+
+  finishBossVictory() {
+    if (this.bossPhase !== 'active') return;
+    this.bossPhase = 'collapse';
+    this.bossEjectEvent?.remove();
+    this.bossEjectEvent = null;
+    this.invincibleUntil = this.time.now + 999999;
+
+    this.popBigText(ARENA.width / 2, ARENA.height * 0.4, 'LA NAPPE\nS\'EFFONDRE !');
+    this.cameras.main.shake(500, 0.025);
+
+    this.bossHazards.children.iterate((c) => { if (c?.active) c.destroy(); });
+
+    this.bossAura?.destroy();
+    this.bossHeat?.destroy();
+    this.bossAura = null;
+    this.bossHeat = null;
+
+    if (this.boss?.active) {
+      this.tweens.add({
+        targets: this.boss,
+        y: ARENA.height + 200,
+        angle: 180,
+        alpha: 0,
+        duration: 1400,
+        ease: 'Cubic.easeIn',
+        onComplete: () => this.boss?.destroy(),
+      });
+    }
+
+    const fallTargets = [this.player, this.hudScore, this.hudHp, this.hudKills, this.attackLabel];
+    fallTargets.forEach((obj) => {
+      if (!obj) return;
+      this.tweens.add({
+        targets: obj,
+        y: obj.y + ARENA.height,
+        angle: Phaser.Math.Between(-30, 30),
+        duration: 1600,
+        ease: 'Cubic.easeIn',
+      });
+    });
+
+    this.time.delayedCall(2000, () => this.showBossVictory());
+  }
+
+  showBossVictory() {
+    this.alive = false;
+    this.explodeBtn?.setVisible(false);
+
+    const cx = ARENA.width / 2;
+    const font = '"Comic Sans MS", "Marker Felt", cursive';
+
+    this.add.rectangle(cx, ARENA.height / 2, ARENA.width, ARENA.height, 0xf5efde, 0.92).setDepth(200);
+    const card = this.add.graphics().setDepth(201);
+    card.fillStyle(0xffffff, 1);
+    card.fillRoundedRect(cx - 300, ARENA.height / 2 - 200, 600, 400, 14);
+    card.lineStyle(6, 0x1a1410, 0.9);
+    card.strokeRoundedRect(cx - 300, ARENA.height / 2 - 200, 600, 400, 14);
+
+    this.add.text(cx, ARENA.height * 0.28, 'PETIT-DÉJ SAUVÉ !', {
+      fontFamily: font, fontSize: '36px', fontStyle: 'bold', color: this.jamAccent,
+    }).setOrigin(0.5).setDepth(202);
+
+    this.add.text(cx, ARENA.height * 0.38, 'Le Grille-Pain Titan a décampé.', {
+      fontFamily: font, fontSize: '20px', color: PALETTE.uiText,
+    }).setOrigin(0.5).setDepth(202);
+
+    const lines = [
+      `Score : ${this.score}`,
+      `Tartines : ${this.totalToastKills}`,
+      `Max en 1 coup : ${this.maxKillsInOneShot}`,
+    ];
+    lines.forEach((line, i) => {
+      this.add.text(cx, ARENA.height * (0.46 + i * 0.07), line, {
+        fontFamily: font, fontSize: '22px', color: PALETTE.uiText,
+      }).setOrigin(0.5).setDepth(202);
+    });
+
+    const restartBtn = this.add.text(cx, ARENA.height * 0.68, 'R ou clic — rejouer', {
+      fontFamily: font, fontSize: '20px', fontStyle: 'bold', color: this.jamAccent,
+      backgroundColor: '#ffffff', padding: { x: 14, y: 8 },
+    }).setOrigin(0.5).setDepth(202).setInteractive({ useHandCursor: true });
+    restartBtn.on('pointerdown', () => this.restartGame());
+
+    this.add.zone(cx, ARENA.height / 2, ARENA.width, ARENA.height)
+      .setInteractive()
+      .setDepth(199)
+      .on('pointerdown', () => this.restartGame());
   }
 
   tryExplode() {
@@ -766,6 +1452,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.popBigText(jx, jy - 50, killed > 0 ? label : 'POUF');
 
     this.charge = 0;
+    this._chargeLabelKey = '';
     this.updateJarFill();
 
     const endCinematic = Math.max(CINEMATIC_MS, victims.length * 70 + 150);
@@ -773,6 +1460,8 @@ export class StyleDoodleScene extends Phaser.Scene {
   }
 
   killEnemy(e, fromX, fromY) {
+    if (e.getData('isBoss')) return;
+    this.registerToastKill();
     const angle = Math.atan2(e.y - fromY, e.x - fromX);
     const dx = Math.cos(angle) * 100;
     const dy = Math.sin(angle) * 100;
@@ -806,6 +1495,56 @@ export class StyleDoodleScene extends Phaser.Scene {
     });
   }
 
+  showSplashText(text, {
+    holdMs = BOSS_SPLASH_HOLD_MS,
+    fadeInMs = BOSS_SPLASH_FADE_IN_MS,
+    fadeOutMs = BOSS_SPLASH_FADE_OUT_MS,
+    fontSize = 76,
+    onComplete,
+  } = {}) {
+    const cx = ARENA.width / 2;
+    const cy = ARENA.height / 2;
+
+    const overlay = this.add.rectangle(cx, cy, ARENA.width, ARENA.height, 0x1a1410)
+      .setDepth(150).setAlpha(0);
+    this.tweens.add({ targets: overlay, alpha: 0.68, duration: fadeInMs * 0.5 });
+
+    const splash = this.add.text(cx, cy, text, {
+      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
+      fontSize: `${fontSize}px`,
+      fontStyle: 'bold',
+      color: '#ffffff',
+      stroke: PALETTE.uiAccent,
+      strokeThickness: 12,
+      align: 'center',
+    }).setOrigin(0.5).setDepth(151).setScale(2.6).setAlpha(0);
+
+    this.cameras.main.shake(320, 0.02);
+    this.cameras.main.flash(180, 255, 120, 90);
+
+    this.tweens.add({
+      targets: splash,
+      alpha: 1,
+      scale: 1,
+      duration: fadeInMs,
+      ease: 'Back.easeOut',
+    });
+
+    this.time.delayedCall(fadeInMs + holdMs, () => {
+      this.tweens.add({
+        targets: [splash, overlay],
+        alpha: 0,
+        duration: fadeOutMs,
+        ease: 'Cubic.easeIn',
+        onComplete: () => {
+          splash.destroy();
+          overlay.destroy();
+          onComplete?.();
+        },
+      });
+    });
+  }
+
   popBigText(x, y, text) {
     const t = this.add.text(x, y, text, {
       fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
@@ -834,7 +1573,7 @@ export class StyleDoodleScene extends Phaser.Scene {
   }
 
   hitPlayer() {
-    if (!this.alive || this.isCinematic) return;
+    if (!this.alive || this.isCinematic || this.bossPhase === 'collapse') return;
     if (this.time.now < this.invincibleUntil) return;
     this.hp -= 1;
     this.invincibleUntil = this.time.now + SURVIVAL.invincibleMs;
@@ -857,6 +1596,7 @@ export class StyleDoodleScene extends Phaser.Scene {
   die() {
     this.alive = false;
     this.enemySpawnEvent.remove();
+    this.bossEjectEvent?.remove();
     this.explodeBtn?.setVisible(false);
 
     const dx0 = this.player.x; const dy0 = this.player.y;
@@ -951,11 +1691,6 @@ export class StyleDoodleScene extends Phaser.Scene {
       return;
     }
 
-    if (this.spaceKey && Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-      this.ensureBgm();
-      this.tryExplode();
-    }
-
     if (this.isExploding && this.explosionStartAt
       && this.time.now - this.explosionStartAt > 4000) {
       this.isExploding = false;
@@ -986,6 +1721,8 @@ export class StyleDoodleScene extends Phaser.Scene {
         chasePlayer(e, this.player, speedNow);
       });
     }
+
+    if (this.bossPhase === 'active') this.updateBoss();
 
     if (this.time.now < this.invincibleUntil) {
       this.player.alpha = (Math.floor(this.time.now / 80) % 2) ? 0.4 : 1;
