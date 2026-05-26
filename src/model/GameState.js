@@ -1,10 +1,17 @@
 import { EventBus } from '../shared/EventBus.js';
 import { PLAYER } from './LevelConfig.js';
+import { CHARACTERS } from './CharacterConfig.js';
 import { randomFrom, KILL_QUIPS, BOSS_QUIPS, HIT_QUIPS, waveMessage } from './Quips.js';
 
 export class GameState {
   constructor() {
+    this.selectedCharacter = CHARACTERS[0];
     this.reset();
+  }
+
+  selectCharacter(character) {
+    this.selectedCharacter = character;
+    EventBus.emit('character-selected', character);
   }
 
   reset() {

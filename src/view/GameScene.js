@@ -3,7 +3,7 @@ import { PLAYER, GAME_WIDTH, GAME_HEIGHT } from '../model/LevelConfig.js';
 import { EventBus } from '../shared/EventBus.js';
 import { GameController } from '../controller/GameController.js';
 import { SpawnController } from '../controller/SpawnController.js';
-import { jarTextureForLives } from './PixelArt.js';
+import { jarTextureForLives, jamBlobTexture } from './PixelArt.js';
 
 export class GameScene extends Phaser.Scene {
   constructor() {
@@ -11,6 +11,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
+    const charId = gameState.selectedCharacter.id;
+
     this.add.tileSprite(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 'floor-tile')
       .setTileScale(4)
       .setDepth(0);
@@ -19,19 +21,24 @@ export class GameScene extends Phaser.Scene {
     border.lineStyle(4, 0xff4466, 0.5);
     border.strokeRect(12, 12, GAME_WIDTH - 24, GAME_HEIGHT - 24);
 
-    this.player = this.physics.add.sprite(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'jar-3');
+    this.player = this.physics.add.sprite(
+      GAME_WIDTH / 2,
+      GAME_HEIGHT / 2,
+      jarTextureForLives(PLAYER.lives, charId),
+    );
     this.player.setScale(2.2);
     this.player.body.setCircle(20);
     this.player.setCollideWorldBounds(true);
     this.player.setDepth(10);
 
+    const blobKey = jamBlobTexture(charId);
     this.bullets = this.physics.add.group({
-      defaultKey: 'jam-blob',
+      defaultKey: blobKey,
       maxSize: 60,
       runChildUpdate: false,
     });
     for (let i = 0; i < 30; i++) {
-      const b = this.bullets.create(0, 0, 'jam-blob');
+      const b = this.bullets.create(0, 0, blobKey);
       b.setScale(1.5);
       b.body.setCircle(8);
       b.setActive(false).setVisible(false);
@@ -91,7 +98,7 @@ export class GameScene extends Phaser.Scene {
     if (gameState.isInvincible) return;
     gameState.playerHit();
     if (gameState.isRunning) {
-      this.player.setTexture(jarTextureForLives(gameState.lives));
+      this.player.setTexture(jarTextureForLives(gameState.lives, gameState.selectedCharacter.id));
       this.gameController.startInvincibility();
     }
   }

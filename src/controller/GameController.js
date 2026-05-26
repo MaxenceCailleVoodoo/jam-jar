@@ -21,7 +21,8 @@ export class GameController {
     this.aimAngle = 0;
 
     EventBus.on('jar-damaged', ({ lives }) => {
-      player.setTexture(jarTextureForLives(lives));
+      const charId = gameState.selectedCharacter.id;
+      player.setTexture(jarTextureForLives(lives, charId));
       scene.tweens.add({
         targets: player,
         angle: { from: -8, to: 8 },

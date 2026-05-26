@@ -1,3 +1,4 @@
+import { CHARACTERS } from '../model/CharacterConfig.js';
 import { registerPixelTextures } from './PixelArt.js';
 
 export class BootScene extends Phaser.Scene {
@@ -5,8 +6,16 @@ export class BootScene extends Phaser.Scene {
     super({ key: 'BootScene' });
   }
 
+  preload() {
+    for (const char of CHARACTERS) {
+      if (char.faceSource) {
+        this.load.image(`face-src-${char.id}`, char.faceSource);
+      }
+    }
+  }
+
   create() {
-    registerPixelTextures(this);
+    registerPixelTextures(this, CHARACTERS);
     this.scene.start('MainMenuScene');
   }
 }

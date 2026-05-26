@@ -1,6 +1,7 @@
 import { EventBus } from '../shared/EventBus.js';
 import { formatScore } from '../shared/utils.js';
-import { jarTextureForLives } from './PixelArt.js';
+import { jarTextureForLives, previewJarTexture } from './PixelArt.js';
+import { gameState } from '../model/GameState.js';
 import { PLAYER } from '../model/LevelConfig.js';
 
 export class HUDScene extends Phaser.Scene {
@@ -19,7 +20,7 @@ export class HUDScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '22px', color: '#ffe066',
     });
 
-    this.jarIcon = this.add.image(pad + 16, pad + 100, 'jar-3').setScale(2);
+    this.jarIcon = this.add.image(pad + 16, pad + 100, previewJarTexture(gameState.selectedCharacter.id)).setScale(2);
     this.livesText = this.add.text(pad + 50, pad + 88, 'JAR OK', {
       fontFamily: 'monospace', fontSize: '18px', color: '#ff6688',
     });
@@ -40,6 +41,7 @@ export class HUDScene extends Phaser.Scene {
     EventBus.on('game-started', () => {
       this.scoreText.setText('Score: 000000');
       this.waveText.setText('Wave: 1');
+      this.jarIcon.setTexture(previewJarTexture(gameState.selectedCharacter.id));
       this.updateJar(PLAYER.lives);
       this.quipText.setText('');
     });
@@ -59,7 +61,8 @@ export class HUDScene extends Phaser.Scene {
   }
 
   updateJar(lives) {
-    this.jarIcon.setTexture(jarTextureForLives(lives));
+    const charId = gameState.selectedCharacter.id;
+    this.jarIcon.setTexture(jarTextureForLives(lives, charId));
     const labels = ['SHATTERED', 'CRITICAL', 'CRACKED', 'JAR OK'];
     this.livesText.setText(labels[lives] ?? 'DEAD');
     this.livesText.setColor(lives <= 1 ? '#ff2222' : '#ff6688');

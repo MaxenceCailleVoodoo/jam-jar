@@ -1,6 +1,7 @@
 import { gameState } from '../model/GameState.js';
 import { formatScore } from '../shared/utils.js';
 import { randomFrom, GAME_OVER_QUIPS } from '../model/Quips.js';
+import { jarTextureForLives } from './PixelArt.js';
 
 export class GameOverScene extends Phaser.Scene {
   constructor() {
@@ -12,7 +13,7 @@ export class GameOverScene extends Phaser.Scene {
     const score = data?.score ?? 0;
 
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.82);
-    this.add.image(width / 2, height * 0.22, 'jar-0').setScale(4).setAlpha(0.9);
+    this.add.image(width / 2, height * 0.22, jarTextureForLives(0, gameState.selectedCharacter.id)).setScale(4).setAlpha(0.9);
 
     this.add.text(width / 2, height * 0.42, 'JAR EMPTY', {
       fontFamily: 'monospace', fontSize: '64px', color: '#ff4466',
