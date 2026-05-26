@@ -1,8 +1,8 @@
 # Jeu 2 Confiture
 
-2D pixel-art : **tu es un pot de confiture**, esquive les ennemis du petit-déj' et déclenche des **bombes en chaîne** pour faire péter tout le monde.
+**Tu es un pot de confiture.** Les tartines de pain de mie te chassent. Appuie sur **SPACE** pour libérer la confiture et les faire toutes splatter — soit partout, soit dans un rayon autour de toi (selon le style).
 
-2 touches et le pot se brise. Plus d'ennemis dans une seule explosion = plus de points.
+2 hits et le pot se brise.
 
 ## Run
 
@@ -11,30 +11,26 @@ npm install
 npm run dev
 ```
 
-## Itération 1 — 3 styles à comparer
+## Itération 2 — 3 styles smooth/vectoriels
 
-Au démarrage, un picker propose 3 prototypes du même gameplay :
+Au démarrage, un picker propose 3 directions visuelles très différentes, toutes vectorielles (plus de pixel art) :
 
-- **A — Saturday Cartoon** : chaleureux, bouncy, familial
-- **B — Pantry Noir** : sombre, tendu, fog of war
-- **C — Neon Arcade** : synthwave, dash (SHIFT), score chase
+- **Juicy** — mobile arcade pastel, formes rebondissantes, attaque GLOBALE (cooldown 6.5s)
+- **Neon Liquid** — synthwave glow, trail, attaque RAYON 240px (cooldown court 2.4s)
+- **Watercolor Doodle** — hand-drawn wobble papier, attaque GLOBALE en gros splat (cooldown 7.5s)
 
 ## Contrôles
 
 | Input | Action |
 |-------|--------|
 | WASD / flèches | Bouger |
-| SHIFT | Dash (Style C uniquement) |
+| SPACE | Déclencher la confiture |
 | R | Rejouer |
 | ESC | Retour au menu de styles |
 
 ## Mécanique partagée
 
-- 2 PV, mort = pot brisé
-- Ennemis attirés par le joueur
-- Bombes posées sur la map → contact déclenche une explosion AOE
-- Combo exponentiel : 1 kill = +160, 4 kills = +1360, 10 kills = +7000
-
-## Ancien shooter (legacy)
-
-Le shooter "Jam Ops" original reste accessible via le code (scènes `MainMenuScene` + `GameScene`) mais n'est plus branché au boot.
+- 2 PV, mort = pot brisé en éclats animés
+- Tartines spawnent depuis les bords et chassent le joueur
+- Difficulté qui ramp sur 60s (vitesse + fréquence de spawn)
+- Combo exponentiel : `100·n + 60·n²` → 1 kill = +160, 4 kills = +1360, 10 kills = +7000

@@ -1,6 +1,7 @@
 /**
- * Helpers partagés par les 3 prototypes "survival + bombes à chaîne".
- * Logique de gameplay commune; chaque style décide de son rendu.
+ * Logique partagée par les 3 prototypes smooth.
+ * Mécanique : esquiver les tartines + appuyer sur SPACE pour déclencher
+ * une attaque "JAM" (globale ou en rayon selon le style).
  */
 
 export const ARENA = {
@@ -11,19 +12,12 @@ export const ARENA = {
 
 export const SURVIVAL = {
   playerHp: 2,
-  playerRadius: 18,
-  enemyRadius: 16,
-  bombRadius: 18,
-  explosionRadius: 130,
   invincibleMs: 1100,
   enemyBaseSpeed: 70,
-  enemyMaxSpeed: 170,
-  enemyHpStart: 1,
-  enemySpawnStartMs: 1200,
-  enemySpawnMinMs: 280,
+  enemyMaxSpeed: 175,
+  enemySpawnStartMs: 950,
+  enemySpawnMinMs: 240,
   enemySpawnRampMs: 50000,
-  bombSpawnMs: 4200,
-  bombMaxOnMap: 6,
   difficultyRampMs: 60000,
 };
 
@@ -35,17 +29,18 @@ export function setupMovementInput(scene) {
     S: Phaser.Input.Keyboard.KeyCodes.S,
     D: Phaser.Input.Keyboard.KeyCodes.D,
   });
+  scene.spaceKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 }
 
 export function readMovementInput(scene) {
-  const cursors = scene.cursors;
-  const wasd = scene.wasd;
+  const c = scene.cursors;
+  const w = scene.wasd;
   let vx = 0;
   let vy = 0;
-  if (cursors.left.isDown || wasd.A.isDown) vx -= 1;
-  if (cursors.right.isDown || wasd.D.isDown) vx += 1;
-  if (cursors.up.isDown || wasd.W.isDown) vy -= 1;
-  if (cursors.down.isDown || wasd.S.isDown) vy += 1;
+  if (c.left.isDown || w.A.isDown) vx -= 1;
+  if (c.right.isDown || w.D.isDown) vx += 1;
+  if (c.up.isDown || w.W.isDown) vy -= 1;
+  if (c.down.isDown || w.S.isDown) vy += 1;
   if (vx && vy) { vx *= 0.7071; vy *= 0.7071; }
   return { vx, vy };
 }
@@ -59,31 +54,20 @@ export function chasePlayer(enemy, player, speed) {
 
 export function randomEdgeSpawn() {
   const side = Phaser.Math.Between(0, 3);
-  const m = 30;
+  const m = 40;
   if (side === 0) return { x: Phaser.Math.Between(m, ARENA.width - m), y: -m };
   if (side === 1) return { x: ARENA.width + m, y: Phaser.Math.Between(m, ARENA.height - m) };
   if (side === 2) return { x: Phaser.Math.Between(m, ARENA.width - m), y: ARENA.height + m };
   return { x: -m, y: Phaser.Math.Between(m, ARENA.height - m) };
 }
 
-export function randomInnerPos(pad = 80, minDistFrom = null, minDist = 160) {
-  for (let i = 0; i < 20; i++) {
-    const x = Phaser.Math.Between(pad, ARENA.width - pad);
-    const y = Phaser.Math.Between(pad, ARENA.height - pad);
-    if (!minDistFrom) return { x, y };
-    const d = Math.hypot(x - minDistFrom.x, y - minDistFrom.y);
-    if (d >= minDist) return { x, y };
-  }
-  return { x: ARENA.width / 2, y: ARENA.height / 2 };
-}
-
-/** Combo scoring: exponential reward for chained kills. */
 export function scoreForCombo(n) {
   if (n <= 0) return 0;
   return Math.round(100 * n + 60 * n * n);
 }
 
 export function comboTier(n) {
+  if (n >= 15) return 'GODLIKE';
   if (n >= 10) return 'INSANE';
   if (n >= 6) return 'MASSIVE';
   if (n >= 4) return 'BIG';
@@ -101,32 +85,41 @@ export function spawnIntervalFor(elapsedMs) {
   return SURVIVAL.enemySpawnStartMs + (SURVIVAL.enemySpawnMinMs - SURVIVAL.enemySpawnStartMs) * t;
 }
 
-export const QUIPS_KILL = [
+/**
+ * Tue tous les ennemis dans un rayon. Renvoie le nombre tué.
+ * `scene.killEnemy(enemy, fromX, fromY)` doit être défini par chaque style.
+ */
+export function killEnemiesInRadius(scene, x, y, radius) {
+  let killed = 0;
+  scene.enemies.children.iterate((e) => {
+    if (!e?.active) return;
+    const d = Math.hypot(e.x - x, e.y - y);
+    if (d <= radius) {
+      killed += 1;
+      scene.killEnemy(e, x, y);
+    }
+  });
+  return killed;
+}
+
+export function killAllEnemies(scene, fromX, fromY) {
+  let killed = 0;
+  scene.enemies.children.iterate((e) => {
+    if (!e?.active) return;
+    killed += 1;
+    scene.killEnemy(e, fromX, fromY);
+  });
+  return killed;
+}
+
+export const QUIPS_JUICY = [
   'YOU GET TOASTED',
-  "C'EST LA CONFITURE",
-  'MARMALADE TIME',
   'BREAD AND BURIED',
   'CRUMBED',
   'JAMMED',
   'BUTTER LUCK NEXT TIME',
-  'CROISSANT KAPUT',
-  'BAGUETTE BAD',
   'TOAST OF THE TOWN',
-];
-
-export const QUIPS_DEATH = [
-  'POT FRACASSÉ',
-  'GAME OVER, MARMALADE',
-  "C'EST FINI POUR LA CONFITURE",
-];
-
-export const QUIPS_NOIR = [
-  'rot in pieces',
-  'stale and dead',
-  'crusted away',
-  'gone moldy',
-  'silenced',
-  'crumbed in the dark',
+  'CRUST IN PIECES',
 ];
 
 export const QUIPS_NEON = [
@@ -135,7 +128,22 @@ export const QUIPS_NEON = [
   'BREAD.EXE STOPPED',
   'SYSTEM JAMMED',
   'GLITCHED OUT',
-  'X-COMBO!',
+  'X-COMBO',
+];
+
+export const QUIPS_DOODLE = [
+  'splat!',
+  'oh non du pain',
+  'mode confiture',
+  'pof!',
+  'gloup',
+  'bye toast',
+];
+
+export const QUIPS_DEATH = [
+  'POT FRACASSÉ',
+  'GAME OVER',
+  'CONFITURE RÉPANDUE',
 ];
 
 export function pickQuip(arr) {
