@@ -22,7 +22,13 @@
   body.touch { cursor: default; }
   #wrap {
     position: relative;
-    width: 100vw; height: 100vh;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
     display: flex; align-items: center; justify-content: center;
   }
   canvas {
@@ -30,8 +36,8 @@
     background: #faf3e2;
     box-shadow: 0 12px 40px rgba(90, 50, 30, .25);
     border-radius: 6px;
-    max-width: 100vw;
-    max-height: 100vh;
+    max-width: 100%;
+    max-height: 100%;
     width: auto;
     height: auto;
   }
@@ -46,11 +52,62 @@
   body.touch.in-game .touch-controls { display: block; }
   body.touch.portrait .touch-controls { display: none !important; }
   body.touch .hud-tip { display: none; }
-  /* In touch landscape, leave a strip below the canvas to hold the controls
-     outside the play area. */
-  body.touch.in-game:not(.portrait) canvas {
-    max-height: calc(100vh - 130px);
-    max-height: calc(100dvh - 130px);
+  /* Layout-editor button: drag-and-drop the touch controls anywhere */
+  .layout-edit-btn {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.5);
+    border-radius: 14px;
+    padding: 5px 12px;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    color: #fff;
+    pointer-events: auto;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    display: none;
+  }
+  body.touch.in-game:not(.portrait) .layout-edit-btn { display: block; }
+  body.editing-layout .layout-edit-btn {
+    background: #2ecc71;
+    border-color: #fff;
+  }
+  /* Pause button (mobile only) */
+  .pause-btn {
+    position: absolute;
+    top: 8px;
+    right: 14px;
+    z-index: 5;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.5);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    pointer-events: auto;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body.touch.in-game:not(.portrait) .pause-btn { display: flex; }
+  body.editing-layout .joystick,
+  body.editing-layout .blast-btn {
+    background: rgba(46,204,113,0.55) !important;
+    border-color: #fff !important;
+    box-shadow: 0 0 0 3px rgba(46,204,113,0.5);
   }
   .joystick {
     position: absolute;
@@ -325,6 +382,8 @@
 
   <!-- Touch controls (mobile only) -->
   <div class="touch-controls" id="touchControls">
+    <button class="layout-edit-btn" id="layoutEditBtn" type="button">⇆ MOVE</button>
+    <button class="pause-btn" id="pauseBtn" type="button" aria-label="Pause">⏸</button>
     <div class="blast-btn" id="blastBtn">BLAST</div>
     <div class="joystick" id="joystick">
       <div class="joystick-knob" id="joyKnob"></div>
@@ -1384,23 +1443,73 @@ function setGameClass(on) {
 }
 
 // Canvas stays at its fixed logical size (1100×720). CSS handles display scaling
-// while preserving aspect ratio. Touch controls reposition to canvas edges.
-function updateControlPositions() {
-  if (!isTouchDevice) return;
+// while preserving aspect ratio. Touch controls live in the viewport overlay
+// and can be dragged anywhere by the player via the MOVE button.
+let editingLayout = false;
+let dragState = null;
+
+function defaultControlPositions() {
   const blastBtn = document.getElementById('blastBtn');
   const joystick = document.getElementById('joystick');
-  const wrap = document.getElementById('wrap');
-  if (!blastBtn || !joystick || !wrap) return;
-  // Anchor controls to the viewport (wrap) edges, not the canvas, so they sit
-  // in the strip below the canvas — the CSS shrinks the canvas to make room.
-  const bottomOff = 14;
-  const sideInset = 18;
-  blastBtn.style.left = sideInset + 'px';
+  if (!blastBtn || !joystick) return;
+  blastBtn.style.left = '18px';
   blastBtn.style.right = 'auto';
-  blastBtn.style.bottom = bottomOff + 'px';
-  joystick.style.right = sideInset + 'px';
+  blastBtn.style.top = 'auto';
+  blastBtn.style.bottom = '14px';
+  joystick.style.right = '18px';
   joystick.style.left = 'auto';
-  joystick.style.bottom = bottomOff + 'px';
+  joystick.style.top = 'auto';
+  joystick.style.bottom = '14px';
+}
+
+function applySavedTouchLayout() {
+  const r = REG.load();
+  const layout = r.touchLayout;
+  if (!layout) return;
+  const wrap = document.getElementById('wrap');
+  const joystick = document.getElementById('joystick');
+  const blastBtn = document.getElementById('blastBtn');
+  if (!wrap || !joystick || !blastBtn) return;
+  const wr = wrap.getBoundingClientRect();
+  // Rescale based on the viewport size at save time, so positions survive
+  // rotation / resize roughly proportionally.
+  const sx = (layout.vw && layout.vw > 0) ? wr.width / layout.vw : 1;
+  const sy = (layout.vh && layout.vh > 0) ? wr.height / layout.vh : 1;
+  const apply = (el, pos) => {
+    if (!pos) return;
+    const w = el.offsetWidth || 80;
+    const h = el.offsetHeight || 80;
+    el.style.left = clamp(pos.left * sx, 0, Math.max(0, wr.width - w)) + 'px';
+    el.style.top = clamp(pos.top * sy, 0, Math.max(0, wr.height - h)) + 'px';
+    el.style.right = 'auto';
+    el.style.bottom = 'auto';
+  };
+  apply(joystick, layout.joy);
+  apply(blastBtn, layout.blast);
+}
+
+function saveTouchLayout() {
+  const wrap = document.getElementById('wrap');
+  const joystick = document.getElementById('joystick');
+  const blastBtn = document.getElementById('blastBtn');
+  if (!wrap || !joystick || !blastBtn) return;
+  const wr = wrap.getBoundingClientRect();
+  const jr = joystick.getBoundingClientRect();
+  const br = blastBtn.getBoundingClientRect();
+  registry = REG.load();
+  registry.touchLayout = {
+    joy:   { left: jr.left - wr.left, top: jr.top - wr.top },
+    blast: { left: br.left - wr.left, top: br.top - wr.top },
+    vw: wr.width,
+    vh: wr.height
+  };
+  REG.save(registry);
+}
+
+function updateControlPositions() {
+  if (!isTouchDevice) return;
+  defaultControlPositions();
+  applySavedTouchLayout();
 }
 
 function updateOrientationClass() {
@@ -1412,9 +1521,11 @@ function updateOrientationClass() {
     if (portrait && !paused) {
       paused = true;
       AUDIO.pauseBgm();
+      syncPauseButton();
     } else if (!portrait && paused) {
       paused = false;
       AUDIO.resumeBgm();
+      syncPauseButton();
     }
   }
 }
@@ -1426,12 +1537,113 @@ if (isTouchDevice) {
   window.addEventListener('orientationchange', () => setTimeout(onLayoutChange, 200));
 }
 
+function syncPauseButton() {
+  const btn = document.getElementById('pauseBtn');
+  if (btn) btn.textContent = paused ? '▶' : '⏸';
+}
+
+function togglePause() {
+  if (state !== STATE.PLAYING && state !== STATE.BOSS) return;
+  paused = !paused;
+  if (paused) AUDIO.pauseBgm(); else AUDIO.resumeBgm();
+  syncPauseButton();
+}
+
 // Joystick handling
 function setupTouchControls() {
   const joystick = document.getElementById('joystick');
   const knob = document.getElementById('joyKnob');
   const blastBtn = document.getElementById('blastBtn');
+  const editBtn = document.getElementById('layoutEditBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
   if (!joystick || !knob || !blastBtn) return;
+
+  if (pauseBtn) {
+    let lastPauseAt = 0;
+    const onPause = (e) => {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      const now = performance.now();
+      if (now - lastPauseAt < 300) return;
+      lastPauseAt = now;
+      togglePause();
+    };
+    pauseBtn.addEventListener('touchstart', onPause, { passive: false });
+    pauseBtn.addEventListener('click', onPause);
+  }
+
+  // ---- Layout-edit mode: capture-phase handlers intercept touches and
+  // drag the controls instead of using them as gameplay inputs. ----
+  function startDrag(el, touch) {
+    const r = el.getBoundingClientRect();
+    dragState = {
+      el, touchId: touch.identifier,
+      offX: touch.clientX - r.left,
+      offY: touch.clientY - r.top
+    };
+  }
+  function moveDrag(touch) {
+    if (!dragState || touch.identifier !== dragState.touchId) return;
+    const wrap = document.getElementById('wrap');
+    if (!wrap) return;
+    const wr = wrap.getBoundingClientRect();
+    const el = dragState.el;
+    const w = el.offsetWidth, h = el.offsetHeight;
+    let x = touch.clientX - wr.left - dragState.offX;
+    let y = touch.clientY - wr.top - dragState.offY;
+    x = clamp(x, 0, Math.max(0, wr.width - w));
+    y = clamp(y, 0, Math.max(0, wr.height - h));
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.style.right = 'auto';
+    el.style.bottom = 'auto';
+  }
+  function endDrag(touch) {
+    if (!dragState || touch.identifier !== dragState.touchId) return;
+    dragState = null;
+    saveTouchLayout();
+  }
+  function attachDragInterceptor(el) {
+    // stopImmediatePropagation is required: it prevents the bubble-phase
+    // joystick/blast handlers (registered on the same element below) from
+    // firing while we're dragging the control around in edit mode.
+    el.addEventListener('touchstart', (e) => {
+      if (!editingLayout) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      startDrag(el, e.changedTouches[0]);
+    }, { passive: false, capture: true });
+    el.addEventListener('touchmove', (e) => {
+      if (!editingLayout) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      for (const t of e.changedTouches) moveDrag(t);
+    }, { passive: false, capture: true });
+    const end = (e) => {
+      if (!editingLayout) return;
+      e.stopImmediatePropagation();
+      for (const t of e.changedTouches) endDrag(t);
+    };
+    el.addEventListener('touchend', end, { capture: true });
+    el.addEventListener('touchcancel', end, { capture: true });
+  }
+  attachDragInterceptor(joystick);
+  attachDragInterceptor(blastBtn);
+
+  if (editBtn) {
+    let lastToggleAt = 0;
+    const toggleEdit = (e) => {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      const now = performance.now();
+      if (now - lastToggleAt < 300) return;  // de-dupe touchstart + click
+      lastToggleAt = now;
+      editingLayout = !editingLayout;
+      document.body.classList.toggle('editing-layout', editingLayout);
+      editBtn.textContent = editingLayout ? '✓ DONE' : '⇆ MOVE';
+      if (!editingLayout) saveTouchLayout();
+    };
+    editBtn.addEventListener('touchstart', toggleEdit, { passive: false });
+    editBtn.addEventListener('click', toggleEdit);
+  }
 
   let joyTouchId = null;
 
@@ -1513,12 +1725,7 @@ window.addEventListener('keydown', e => {
       triggerExplosion(player);
     }
   }
-  if (k === 'p') {
-    if (state === STATE.PLAYING || state === STATE.BOSS) {
-      paused = !paused;
-      if (paused) AUDIO.pauseBgm(); else AUDIO.resumeBgm();
-    }
-  }
+  if (k === 'p') togglePause();
   if (k === 'm') {
     AUDIO.muted = !AUDIO.muted;
     if (AUDIO.bgm) AUDIO.bgm.muted = AUDIO.muted;
@@ -1889,6 +2096,9 @@ function startGame() {
   document.getElementById('menu').classList.add('hidden');
   document.getElementById('endScreen').classList.add('hidden');
   setGameClass(true);
+  // Touch controls are now visible — apply saved positions (offsetWidth needs
+  // the element to be displayed, so this can't run before in-game).
+  if (isTouchDevice) requestAnimationFrame(updateControlPositions);
   toasts = []; particles = []; explosions = []; floatTexts = []; jamSplats = [];
   victoryAnim.active = false;
   victoryAnim.timer = 0;
@@ -1903,6 +2113,7 @@ function startGame() {
   wavesPopped = 0;
   bestWave = 0;
   paused = false;
+  syncPauseButton();
   screenShake = 0;
   state = STATE.PLAYING;
   AUDIO.startBgm();
