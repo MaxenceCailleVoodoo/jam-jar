@@ -42,8 +42,9 @@ const CHARGE_MAX_RADIUS = 520;
 const CHARGE_MIN_TO_FIRE = 0.02;
 const CINEMATIC_MS = 700;
 const REPAIR_KILL_THRESHOLD = 20;
-const BOSS_KILL_THRESHOLD = 15;
-const BOSS_SURVIVE_MS = 52000;
+const BOSS_KILL_THRESHOLD = 55;
+const BOSS_SURVIVE_MS = 40000;
+const ENDLESS_SPAWN_MS = 360;
 const BOSS_EJECT_INTERVAL_MS = 1250;
 const BOSS_BURST_EVERY = 5;
 const BOSS_SPLASH_HOLD_MS = 4200;
@@ -250,7 +251,7 @@ function roundRectPath(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-/** Titan Toaster boss — doodle chrome + jam accents. */
+/** Toaster boss — doodle chrome + jam accents. */
 function drawToasterFrame(W, H, seed) {
   const { canvas, ctx } = makeCanvas(W, H);
   const rand = rng(seed);
@@ -514,12 +515,12 @@ function drawToasterFrame(W, H, seed) {
   ctx.lineWidth = 6;
   ctx.strokeStyle = ink;
   ctx.lineJoin = 'round';
-  ctx.strokeText('TITAN', labelX, labelY);
+  ctx.strokeText('TOASTER', labelX, labelY);
   ctx.fillStyle = PALETTE.paper;
-  ctx.fillText('TITAN', labelX, labelY);
+  ctx.fillText('TOASTER', labelX, labelY);
   ctx.fillStyle = rage;
   ctx.globalAlpha = 0.25;
-  ctx.fillText('TITAN', labelX + 1, labelY + 1);
+  ctx.fillText('TOASTER', labelX + 1, labelY + 1);
   ctx.globalAlpha = 1;
 
   for (let i = 0; i < 8; i++) {
@@ -691,6 +692,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.maxKillsInOneShot = 0;
     this.totalToastKills = 0;
     this.bossTriggered = false;
+    this.bossDefeated = false;
     this.bossPhase = null;
     this.boss = null;
     this.bossEjectEvent = null;
@@ -878,6 +880,8 @@ export class StyleDoodleScene extends Phaser.Scene {
 
   bindEndScreenRestart(cx, y) {
     this.input.enabled = true;
+    if (this.input.keyboard) this.input.keyboard.enabled = true;
+    this.game.canvas?.focus({ preventScroll: true });
     const restartBtn = this.add.text(cx, y, 'R or click — replay', {
       fontFamily: DOODLE_FONT,
       fontSize: '20px',
@@ -926,6 +930,14 @@ export class StyleDoodleScene extends Phaser.Scene {
     kb.off('keydown-R', this._onRestartDown);
     kb.on('keydown-R', this._onRestartDown);
 
+    this._onWindowRestartKey = (event) => {
+      if (event.key === 'r' || event.key === 'R') {
+        event.preventDefault();
+        this.restartGame();
+      }
+    };
+    window.addEventListener('keydown', this._onWindowRestartKey);
+
     this.events.once('shutdown', () => {
       this.enemySpawnEvent?.remove();
       this.bossEjectEvent?.remove();
@@ -934,6 +946,7 @@ export class StyleDoodleScene extends Phaser.Scene {
       kb.off('keydown-SPACE', this._onSpaceDown);
       this.restartKey?.off('down', this._onRestartDown);
       kb.off('keydown-R', this._onRestartDown);
+      window.removeEventListener('keydown', this._onWindowRestartKey);
       this.touchControls?.detach();
     });
   }
@@ -1117,12 +1130,17 @@ export class StyleDoodleScene extends Phaser.Scene {
 
   registerToastKill() {
     this.totalToastKills += 1;
-    this.hudKillsCount?.setText(`${this.totalToastKills} / ${BOSS_KILL_THRESHOLD}`);
+    this.hudKillsCount?.setText(this.formatKillsCountText());
     this.refreshBestHud();
     if (!this.bossTriggered && this.totalToastKills >= BOSS_KILL_THRESHOLD) {
       this.bossTriggered = true;
       this.scheduleBossIntro();
     }
+  }
+
+  formatKillsCountText() {
+    if (this.bossDefeated) return `${this.totalToastKills}`;
+    return `${this.totalToastKills} / ${BOSS_KILL_THRESHOLD}`;
   }
 
   scheduleBossIntro() {
@@ -1157,7 +1175,7 @@ export class StyleDoodleScene extends Phaser.Scene {
       fontSize: 84,
       onComplete: () => {
         if (!this.alive) return;
-        this.popBigText(ARENA.width / 2, ARENA.height * 0.32, 'THE TITAN\nTOASTER!');
+        this.popBigText(ARENA.width / 2, ARENA.height * 0.32, 'THE TOASTER!');
         this.time.delayedCall(1100, () => {
           if (!this.alive) return;
           this.isCinematic = false;
@@ -1181,7 +1199,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.bossEjectCount = 0;
     this.boss.setDepth(25);
     this.boss.setData('isBoss', true);
-    this.boss.setScale(1.18);
+    this.boss.setScale(0.95);
 
     this.bossAura = this.add.graphics().setDepth(24);
     this.bossHeat = this.add.graphics().setDepth(26);
@@ -1197,8 +1215,8 @@ export class StyleDoodleScene extends Phaser.Scene {
 
     this.tweens.add({
       targets: this.boss,
-      scaleX: 1.2,
-      scaleY: 1.16,
+      scaleX: 0.97,
+      scaleY: 0.93,
       duration: 280,
       yoyo: true,
       repeat: -1,
@@ -1229,21 +1247,16 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.time.delayedCall(600, () => this.bossEjectToast(false));
   }
 
-  drawBossAura(rage) {
+  drawBossAura() {
     if (!this.bossAura || !this.boss?.active) return;
     const g = this.bossAura;
     g.clear();
-    const pulse = 0.55 + 0.2 * Math.sin(this.time.now / 200);
     const bx = this.boss.x;
-    const by = this.boss.y + 10;
-    const rw = this.boss.displayWidth * 0.58;
-    const rh = this.boss.displayHeight * 0.28;
-    g.fillStyle(rage, 0.1 * pulse);
-    g.fillEllipse(bx, by, rw * 2.1, rh * 2.2);
-    g.lineStyle(3, rage, 0.2 * pulse);
-    g.strokeEllipse(bx, by, rw * 1.95, rh * 2);
-    g.lineStyle(2, 0x2a1810, 0.08);
-    g.strokeEllipse(bx, by, rw * 2.35, rh * 2.4);
+    const by = this.boss.y + this.boss.displayHeight * 0.42;
+    const rw = this.boss.displayWidth * 0.42;
+    const rh = this.boss.displayHeight * 0.09;
+    g.fillStyle(0x1a1410, 0.28);
+    g.fillEllipse(bx, by, rw * 2, rh * 2);
   }
 
   ejectToastFromSlot(slotIdx, rageT) {
@@ -1326,7 +1339,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     const t = Phaser.Math.Clamp(elapsed / BOSS_SURVIVE_MS, 0, 1);
     const bossSpeed = 72 + t * 105;
     chasePlayer(this.boss, this.player, bossSpeed);
-    this.drawBossAura(this.jamColor);
+    this.drawBossAura();
 
     const leftMs = Math.max(0, this.bossPhaseEndsAt - this.time.now);
     const sec = Math.ceil(leftMs / 1000);
@@ -1344,12 +1357,16 @@ export class StyleDoodleScene extends Phaser.Scene {
   finishBossVictory() {
     if (this.bossPhase !== 'active') return;
     this.bossPhase = 'collapse';
+    this.bossDefeated = true;
     this.bossEjectEvent?.remove();
     this.bossEjectEvent = null;
-    this.invincibleUntil = this.time.now + 999999;
 
-    this.popBigText(ARENA.width / 2, ARENA.height * 0.4, 'THE TABLECLOTH\nCOLLAPSES!');
+    const briefInvincibility = 1800;
+    this.invincibleUntil = this.time.now + briefInvincibility;
+
+    this.popBigText(ARENA.width / 2, ARENA.height * 0.4, 'BREAKFAST SAVED!');
     this.cameras.main.shake(500, 0.025);
+    this.cameras.main.flash(220, 255, 240, 200);
 
     this.bossHazards.children.iterate((c) => { if (c?.active) c.destroy(); });
 
@@ -1361,7 +1378,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     if (this.boss?.active) {
       this.tweens.add({
         targets: this.boss,
-        y: ARENA.height + 200,
+        y: -300,
         angle: 180,
         alpha: 0,
         duration: 1400,
@@ -1370,67 +1387,25 @@ export class StyleDoodleScene extends Phaser.Scene {
       });
     }
 
-    const fallTargets = [
-      this.player, this.hudScore, this.hudHp,
-      this.hudKillsLabel, this.hudKillsIcon, this.hudKillsCount,
-    ];
-    fallTargets.forEach((obj) => {
-      if (!obj) return;
-      this.tweens.add({
-        targets: obj,
-        y: obj.y + ARENA.height,
-        angle: Phaser.Math.Between(-30, 30),
-        duration: 1600,
-        ease: 'Cubic.easeIn',
-      });
-    });
+    this.hudBossTimer?.setAlpha(0);
 
-    this.time.delayedCall(2000, () => this.showBossVictory());
+    this.time.delayedCall(1400, () => this.startEndlessMode());
   }
 
-  showBossVictory() {
-    this.alive = false;
-    this.explodeBtn?.setVisible(false);
+  startEndlessMode() {
+    if (!this.alive) return;
+    this.bossPhase = null;
 
-    const cx = ARENA.width / 2;
+    this.hudKillsLabel?.setText('toasts toasted');
+    this.hudKillsCount?.setText(this.formatKillsCountText());
+    this.setToastKillHudVisible(true);
 
-    const persisted = recordRun({
-      score: this.score,
-      kills: this.totalToastKills,
-      maxCombo: this.maxKillsInOneShot,
-      won: true,
-    });
-    this.best = persisted.record;
-    this.refreshBestHud();
+    this.popBigText(ARENA.width / 2, ARENA.height * 0.32, 'ENDLESS TOAST!');
 
-    this.add.rectangle(cx, ARENA.height / 2, ARENA.width, ARENA.height, 0xf5efde, 0.92).setDepth(200);
-    const card = this.add.graphics().setDepth(201);
-    card.fillStyle(0xffffff, 1);
-    card.fillRoundedRect(cx - 300, ARENA.height / 2 - 200, 600, 400, 14);
-    card.lineStyle(6, 0x1a1410, 0.9);
-    card.strokeRoundedRect(cx - 300, ARENA.height / 2 - 200, 600, 400, 14);
-
-    this.add.text(cx, ARENA.height * 0.28, 'BREAKFAST SAVED!', {
-      fontFamily: DOODLE_FONT, fontSize: '36px', fontStyle: 'bold', color: this.uiJamHex,
-    }).setOrigin(0.5).setDepth(202);
-
-    this.add.text(cx, ARENA.height * 0.38, 'The Titan Toaster has fled.', {
-      fontFamily: DOODLE_FONT, fontSize: '20px', color: PALETTE.uiText,
-    }).setOrigin(0.5).setDepth(202);
-
-    const lines = [
-      `Score: ${this.score}${persisted.isNewBestScore ? '  (NEW BEST!)' : ''}`,
-      `Toasts: ${this.totalToastKills}${persisted.isNewBestKills ? '  (NEW BEST!)' : ''}`,
-      `Max in one shot: ${this.maxKillsInOneShot}${persisted.isNewBestMaxCombo ? '  (NEW BEST!)' : ''}`,
-      `Best score: ${this.best.bestScore}  ·  Wins: ${this.best.wins}`,
-    ];
-    lines.forEach((line, i) => {
-      this.add.text(cx, ARENA.height * (0.46 + i * 0.06), line, {
-        fontFamily: DOODLE_FONT, fontSize: '20px', color: PALETTE.uiText,
-      }).setOrigin(0.5).setDepth(202);
-    });
-
-    this.bindEndScreenRestart(cx, ARENA.height * 0.72);
+    if (this.enemySpawnEvent) {
+      this.enemySpawnEvent.paused = false;
+      this.enemySpawnEvent.delay = ENDLESS_SPAWN_MS;
+    }
   }
 
   tryExplode() {
@@ -1750,7 +1725,7 @@ export class StyleDoodleScene extends Phaser.Scene {
       score: this.score,
       kills: this.totalToastKills,
       maxCombo: this.maxKillsInOneShot,
-      won: false,
+      won: this.bossDefeated,
     });
     this.best = persisted.record;
     this.refreshBestHud();
@@ -1764,7 +1739,8 @@ export class StyleDoodleScene extends Phaser.Scene {
 
     const cx = ARENA.width / 2;
 
-    this.add.text(cx, ARENA.height * 0.28, pickQuip(QUIPS_DEATH), {
+    const heading = this.bossDefeated ? 'BREAKFAST SAVED!' : pickQuip(QUIPS_DEATH);
+    this.add.text(cx, ARENA.height * 0.28, heading, {
       fontFamily: DOODLE_FONT, fontSize: '36px', fontStyle: 'bold', color: this.uiJamHex,
     }).setOrigin(0.5).setDepth(202).setAngle(Phaser.Math.Between(-3, 3));
 
@@ -1774,6 +1750,7 @@ export class StyleDoodleScene extends Phaser.Scene {
 
     const lines = [
       `Score: ${this.score}${persisted.isNewBestScore ? '  (NEW BEST!)' : ''}`,
+      `Toasts toasted: ${this.totalToastKills}${persisted.isNewBestKills ? '  (NEW BEST!)' : ''}`,
       `Max toasts in one shot: ${this.maxKillsInOneShot}${persisted.isNewBestMaxCombo ? '  (NEW BEST!)' : ''}`,
       `Average per shot: ${avgKills}`,
       `Best: ${this.best.bestScore}  ·  Toasts ${this.best.bestKills}  ·  Wins ${this.best.wins}`,

@@ -185,12 +185,11 @@ export function pickQuip(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-const JAM_EXPLOSION_VOLUME = 0.9;
-const JAM_EXPLOSION_FALLBACK_MS = 2300;
+const JAM_EXPLOSION_VOLUME = 1.0;
 
 export const BGM_VOLUME = 0.42;
 
-/** Pause BGM, play jam explosion SFX, then resume BGM. */
+/** Play jam explosion SFX on top of BGM (BGM keeps playing). */
 export function playJamExplosion(scene) {
   const sm = scene.sound;
   if (!sm) return;
@@ -198,53 +197,15 @@ export function playJamExplosion(scene) {
   const ctx = sm.context;
   if (ctx?.state === 'suspended') ctx.resume();
 
-  const bgm = sm.get('bgm');
-
-  if (bgm && bgm.getData('jamExplosionActive') !== true) {
-    bgm.setData('jamExplosionActive', true);
-    bgm.setData('jamExplosionSavedVolume', bgm.volume);
-    bgm.setData('jamExplosionWasPlaying', bgm.isPlaying);
-    if (bgm.isPlaying) bgm.pause();
-  }
-
-  let restored = false;
-  const restoreBgm = () => {
-    if (restored) return;
-    restored = true;
-    if (!bgm || bgm.getData('jamExplosionActive') !== true) return;
-
-    const vol = bgm.getData('jamExplosionSavedVolume');
-    const wasPlaying = bgm.getData('jamExplosionWasPlaying');
-    bgm.setData('jamExplosionActive', null);
-    bgm.setData('jamExplosionSavedVolume', null);
-    bgm.setData('jamExplosionWasPlaying', null);
-
-    if (typeof vol === 'number') bgm.setVolume(vol);
-    if (wasPlaying && !bgm.isPlaying) bgm.play();
-  };
-
-  if (!scene.cache?.audio?.exists('jam-explosion')) {
-    restoreBgm();
-    return;
-  }
+  if (!scene.cache?.audio?.exists('jam-explosion')) return;
 
   let sfx = sm.get('jam-explosion');
   if (!sfx) sfx = sm.add('jam-explosion', { volume: JAM_EXPLOSION_VOLUME });
-  if (!sfx) {
-    restoreBgm();
-    return;
-  }
+  if (!sfx) return;
   if (sfx.isPlaying) sfx.stop();
-
-  const durationMs = sfx.duration > 0
-    ? Math.ceil(sfx.duration * 1000) + 150
-    : JAM_EXPLOSION_FALLBACK_MS;
-
-  sfx.once('complete', restoreBgm);
-  scene.time.delayedCall(durationMs, restoreBgm);
   try {
     sfx.play();
   } catch {
-    restoreBgm();
+    // Optional audio — visual explosion still runs.
   }
 }
