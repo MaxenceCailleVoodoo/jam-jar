@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
 <title>JAM JAR vs TOASTS</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -12,8 +13,13 @@
     color: #3a2a1a;
     overflow: hidden;
     user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
     cursor: crosshair;
+    touch-action: none;
+    overscroll-behavior: none;
   }
+  body.touch { cursor: default; }
   #wrap {
     position: relative;
     width: 100vw; height: 100vh;
@@ -24,6 +30,84 @@
     background: #faf3e2;
     box-shadow: 0 12px 40px rgba(90, 50, 30, .25);
     border-radius: 6px;
+    max-width: 100vw;
+    max-height: 100vh;
+    width: auto;
+    height: auto;
+  }
+  /* Touch controls (visible only on touch devices) */
+  .touch-controls {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 4;
+    display: none;
+  }
+  body.touch.in-game .touch-controls { display: block; }
+  body.touch .hud-tip { display: none; }
+  .joystick {
+    position: absolute;
+    bottom: 28px;
+    right: 28px;
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.18);
+    border: 4px solid rgba(0,0,0,0.28);
+    pointer-events: auto;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .joystick-knob {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 68px; height: 68px;
+    margin: -34px 0 0 -34px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.55);
+    border: 4px solid rgba(0,0,0,0.38);
+    pointer-events: none;
+    transition: background 0.1s;
+  }
+  .joystick.active .joystick-knob { background: rgba(255,255,255,0.85); }
+  .blast-btn {
+    position: absolute;
+    bottom: 28px;
+    left: 28px;
+    width: 128px;
+    height: 128px;
+    border-radius: 50%;
+    background: rgba(255,180,40,0.38);
+    border: 5px solid rgba(0,0,0,0.38);
+    pointer-events: auto;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 1px;
+    color: #fff;
+    text-shadow: 2px 2px 0 rgba(0,0,0,0.4);
+    transition: transform 0.06s, background 0.1s;
+  }
+  .blast-btn::after {
+    content: '💥';
+    font-size: 28px;
+    margin-top: 2px;
+  }
+  .blast-btn.active, .blast-btn:active {
+    background: rgba(255,200,60,0.75);
+    transform: scale(0.92);
+  }
+  .blast-btn.cooldown {
+    background: rgba(120,120,120,0.35);
+    color: rgba(255,255,255,0.6);
   }
   .overlay {
     position: absolute; inset: 0;
@@ -78,7 +162,7 @@
     margin: 32px 0 10px;
   }
   .flavor {
-    width: 150px; padding: 22px 10px;
+    width: 170px; padding: 22px 10px;
     border-radius: 16px;
     background: rgba(255,255,255,.6);
     border: 4px dashed rgba(0,0,0,.18);
@@ -97,8 +181,10 @@
   .flavor .name {
     font-family: system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
     font-weight: 700;
-    font-size: 22px;
-    letter-spacing: 1px;
+    font-size: 17px;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+    overflow: hidden;
   }
   button.play {
     margin-top: 26px;
@@ -147,6 +233,25 @@
     font-family: Georgia, serif;
     letter-spacing: 1px;
   }
+  /* ==== MOBILE / SMALL SCREENS ==== */
+  @media (max-width: 720px) {
+    .overlay { padding: 20px; }
+    .overlay h1 { font-size: 56px; text-shadow: 3px 3px 0 var(--jam, #d4395e), 4px 4px 0 rgba(0,0,0,.18); margin-bottom: 2px; }
+    .overlay h2 { font-size: 26px; margin-bottom: 16px; }
+    .overlay p { font-size: 14px; line-height: 1.4; margin-bottom: 8px; max-width: 92%; }
+    .overlay .small { font-size: 12px; }
+    .flavors { gap: 10px; flex-wrap: wrap; justify-content: center; margin: 18px 0 6px; }
+    .flavor { width: 100px; padding: 12px 6px; border-width: 3px; }
+    .flavor .swatch { width: 50px; height: 50px; margin: 0 auto 8px; }
+    .flavor .name { font-size: 13px; letter-spacing: 0.2px; }
+    button.play { font-size: 22px; padding: 12px 32px; margin-top: 14px; letter-spacing: 1px; }
+    .stats { font-size: 14px; padding: 14px 18px; min-width: 0; width: 92%; }
+    .stats b { min-width: 130px; font-size: 13px; }
+    .joystick { width: 120px; height: 120px; bottom: 18px; right: 18px; border-width: 3px; }
+    .joystick-knob { width: 56px; height: 56px; margin: -28px 0 0 -28px; border-width: 3px; }
+    .blast-btn { width: 100px; height: 100px; bottom: 18px; left: 18px; font-size: 17px; border-width: 4px; }
+    .blast-btn::after { font-size: 22px; }
+  }
 </style>
 </head>
 <body>
@@ -177,6 +282,14 @@
   </div>
 
   <div class="hud-tip" id="tip">WASD / arrows to move — SPACE to blast (charge fills automatically) — M to mute</div>
+
+  <!-- Touch controls (mobile only) -->
+  <div class="touch-controls" id="touchControls">
+    <div class="blast-btn" id="blastBtn">BLAST</div>
+    <div class="joystick" id="joystick">
+      <div class="joystick-knob" id="joyKnob"></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -257,7 +370,7 @@ const CFG = {
   playerRadius: 26,
   toastRadius: 22,
   bossHp: 90,
-  blastCooldown: 1200         // ms minimum delay between blasts (anti-spam)
+  blastCooldown: 500          // ms minimum delay between blasts (anti-spam)
 };
 
 // ----- Funny kill phrases -----
@@ -321,7 +434,7 @@ const AUDIO = {
 AUDIO.init();
 
 // ----- States -----
-const STATE = { MENU:'menu', PLAYING:'playing', BOSS:'boss', END:'end' };
+const STATE = { MENU:'menu', PLAYING:'playing', BOSS:'boss', VICTORY:'victory', END:'end' };
 let state = STATE.MENU;
 
 // ----- Runtime vars -----
@@ -333,6 +446,8 @@ let toasts = [];
 let particles = [];
 let explosions = [];
 let floatTexts = [];
+let jamSplats = [];                          // permanent jam splatters on the canvas
+let victoryAnim = { active: false, timer: 0, splatTimer: 0, totalTime: 3200 };
 let player, boss = null;
 let kills = 0;
 let score = 0;
@@ -862,6 +977,106 @@ function hexA(hex, a) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+
+// =============================================================
+// JAM SPLATS (victory animation)
+// =============================================================
+function makeSplat(x, y, color, sizeMul = 1) {
+  const drips = [];
+  const n = 4 + Math.floor(Math.random() * 6);
+  for (let i = 0; i < n; i++) {
+    drips.push({
+      angle: rnd(0, Math.PI*2),
+      dist: rnd(0.65, 1.5),
+      size: rnd(0.18, 0.42)
+    });
+  }
+  return {
+    x, y,
+    age: 0,
+    targetR: rnd(55, 140) * sizeMul,
+    growT: rnd(0.25, 0.5),
+    color,
+    drips
+  };
+}
+
+function updateSplats(dt) {
+  for (const s of jamSplats) s.age += dt;
+}
+
+function drawSplats() {
+  for (const s of jamSplats) {
+    const a = clamp(s.age / s.growT, 0, 1);
+    const r = s.targetR * easeOut(a);
+    if (r < 2) continue;
+    watercolorBlob(s.x, s.y, r, s.color, 0.62, 2);
+    watercolorBlob(s.x, s.y, r * 0.6, s.color, 0.55, 1);
+    for (const d of s.drips) {
+      const dx = Math.cos(d.angle) * r * d.dist;
+      const dy = Math.sin(d.angle) * r * d.dist;
+      watercolorBlob(s.x + dx, s.y + dy, r * d.size, s.color, 0.55, 1);
+    }
+  }
+}
+
+function startVictoryAnim() {
+  victoryAnim.active = true;
+  victoryAnim.timer = victoryAnim.totalTime;
+  victoryAnim.splatTimer = 0;
+  // Wipe remaining toasts in a particle burst, no point keeping them around
+  for (const t of toasts) {
+    for (let i=0;i<6;i++) particles.push(makeParticle(t.x, t.y, PAL.toast, PAL.toastDk));
+  }
+  toasts = [];
+  // Initial massive splat at boss position
+  if (boss) {
+    jamSplats.push(makeSplat(boss.x, boss.y, PAL.jam, 2.2));
+    for (let i = 0; i < 6; i++) {
+      const ang = (Math.PI*2/6)*i + rnd(-0.3, 0.3);
+      const dist = rnd(60, 140);
+      jamSplats.push(makeSplat(
+        boss.x + Math.cos(ang)*dist,
+        boss.y + Math.sin(ang)*dist,
+        Math.random() < 0.5 ? PAL.jam : PAL.jamDk,
+        1.4
+      ));
+    }
+  }
+  screenShake = 40;
+}
+
+function updateVictoryAnim(dt) {
+  if (!victoryAnim.active) return;
+  victoryAnim.timer -= dt * 1000;
+  victoryAnim.splatTimer -= dt * 1000;
+  // Spawn new splats periodically across the whole screen
+  if (victoryAnim.splatTimer <= 0) {
+    const batch = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < batch; i++) {
+      const x = rnd(40, W - 40);
+      const y = rnd(40, H - 40);
+      const col = Math.random() < 0.65 ? PAL.jam :
+                  Math.random() < 0.6 ? PAL.jamLt : PAL.jamDk;
+      jamSplats.push(makeSplat(x, y, col));
+    }
+    // Toss in a few particle bursts for extra splash energy
+    for (let i = 0; i < 12; i++) {
+      particles.push(makeParticle(rnd(0, W), rnd(0, H), PAL.jam, PAL.jamDk));
+    }
+    if (Math.random() < 0.45) AUDIO.blast();
+    victoryAnim.splatTimer = 90 + Math.random() * 80;
+  }
+  // Light ongoing shake
+  if (Math.random() < 0.15) screenShake = Math.max(screenShake, 14);
+  // End of animation → real end screen
+  if (victoryAnim.timer <= 0) {
+    victoryAnim.active = false;
+    endGame(true);
+  }
+}
+
 // =============================================================
 // PARTICLES
 // =============================================================
@@ -1109,6 +1324,95 @@ function drawBoss() {
 // INPUT
 // =============================================================
 const keys = {};
+const touchAxis = { x: 0, y: 0, active: false };
+
+// Touch device detection
+const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+if (isTouchDevice) {
+  document.body.classList.add('touch');
+}
+function setGameClass(on) {
+  document.body.classList.toggle('in-game', on);
+}
+
+// Joystick handling
+function setupTouchControls() {
+  const joystick = document.getElementById('joystick');
+  const knob = document.getElementById('joyKnob');
+  const blastBtn = document.getElementById('blastBtn');
+  if (!joystick || !knob || !blastBtn) return;
+
+  let joyTouchId = null;
+
+  function joyMove(touch) {
+    const rect = joystick.getBoundingClientRect();
+    const cx = rect.left + rect.width/2;
+    const cy = rect.top + rect.height/2;
+    let dx = touch.clientX - cx;
+    let dy = touch.clientY - cy;
+    const maxD = rect.width/2 - 12;
+    const d = Math.hypot(dx, dy);
+    if (d > maxD) { dx = dx/d * maxD; dy = dy/d * maxD; }
+    touchAxis.x = dx / maxD;
+    touchAxis.y = dy / maxD;
+    touchAxis.active = true;
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+  }
+  function joyReset() {
+    touchAxis.active = false;
+    touchAxis.x = 0;
+    touchAxis.y = 0;
+    knob.style.transform = 'translate(0,0)';
+    joystick.classList.remove('active');
+    joyTouchId = null;
+  }
+
+  joystick.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (joyTouchId !== null) return;
+    const t = e.changedTouches[0];
+    joyTouchId = t.identifier;
+    joystick.classList.add('active');
+    joyMove(t);
+  }, { passive: false });
+  joystick.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyTouchId) { joyMove(t); break; }
+    }
+  }, { passive: false });
+  const joyEnd = (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyTouchId) { joyReset(); break; }
+    }
+  };
+  joystick.addEventListener('touchend', joyEnd);
+  joystick.addEventListener('touchcancel', joyEnd);
+
+  // Blast button
+  let blastTouchId = null;
+  blastBtn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (blastTouchId !== null) return;
+    blastTouchId = e.changedTouches[0].identifier;
+    blastBtn.classList.add('active');
+    if ((state === STATE.PLAYING || state === STATE.BOSS) && player && !paused) {
+      triggerExplosion(player);
+    }
+  }, { passive: false });
+  const blastEnd = (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === blastTouchId) {
+        blastBtn.classList.remove('active');
+        blastTouchId = null;
+        break;
+      }
+    }
+  };
+  blastBtn.addEventListener('touchend', blastEnd);
+  blastBtn.addEventListener('touchcancel', blastEnd);
+}
+
 window.addEventListener('keydown', e => {
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
   const k = e.key.toLowerCase();
@@ -1139,20 +1443,36 @@ window.addEventListener('keyup', e => {
 // GAME LOOP
 // =============================================================
 function update(dt) {
+  // Victory animation runs in its own simple loop
+  if (state === STATE.VICTORY) {
+    updateVictoryAnim(dt);
+    updateSplats(dt);
+    updateParticles(dt);
+    updateExplosions(dt);
+    updateFloatTexts(dt);
+    if (screenShake > 0) screenShake = Math.max(0, screenShake - dt * 60);
+    return;
+  }
   if (state !== STATE.PLAYING && state !== STATE.BOSS) return;
   if (paused) return;
 
   elapsed += dt * 1000;
 
-  // Movement
+  // Movement (touch joystick takes priority when active)
   let ax = 0, ay = 0;
-  if (keys['a'] || keys['arrowleft']) ax -= 1;
-  if (keys['d'] || keys['arrowright']) ax += 1;
-  if (keys['w'] || keys['arrowup']) ay -= 1;
-  if (keys['s'] || keys['arrowdown']) ay += 1;
-  const len = Math.hypot(ax, ay) || 1;
-  player.vx = (ax/len) * CFG.playerSpeed;
-  player.vy = (ay/len) * CFG.playerSpeed;
+  if (touchAxis.active) {
+    ax = touchAxis.x;
+    ay = touchAxis.y;
+  } else {
+    if (keys['a'] || keys['arrowleft']) ax -= 1;
+    if (keys['d'] || keys['arrowright']) ax += 1;
+    if (keys['w'] || keys['arrowup']) ay -= 1;
+    if (keys['s'] || keys['arrowdown']) ay += 1;
+  }
+  const len = Math.hypot(ax, ay);
+  if (len > 1) { ax /= len; ay /= len; }
+  player.vx = ax * CFG.playerSpeed;
+  player.vy = ay * CFG.playerSpeed;
   player.x += player.vx * dt;
   player.y += player.vy * dt;
   player.x = clamp(player.x, 36, W-36);
@@ -1233,13 +1553,14 @@ function update(dt) {
     spawnBoss();
   }
 
-  // Boss kill = victory
+  // Boss kill = victory animation kick-off
   if (state === STATE.BOSS && boss && boss.hp <= 0) {
     score += 5000;
     floatTexts.push({ x: W/2, y: H/2, text: 'TITAN CRUSHED  +5000', color: PAL.glow, life: 2.5, max: 2.5, size: 78, shake: true });
+    startVictoryAnim();
     boss = null;
-    screenShake = 30;
-    endGame(true);
+    state = STATE.VICTORY;
+    AUDIO.blast();
     return;
   }
 
@@ -1272,10 +1593,35 @@ function render() {
   for (const t of toasts) drawToast(t);
   if (state === STATE.BOSS) drawBoss();
   drawParticles();
-  if (player) drawPlayer(player);
+  if (player && state !== STATE.VICTORY) drawPlayer(player);
+  // Jam splats sit on top — they're the visual climax
+  drawSplats();
   drawFloatTexts();
-  drawLowHpWarning();
-  drawHUD();
+  if (state !== STATE.VICTORY) drawLowHpWarning();
+  if (state !== STATE.VICTORY) drawHUD();
+
+  // VICTORY overlay text
+  if (state === STATE.VICTORY) {
+    const fade = clamp(1 - victoryAnim.timer / victoryAnim.totalTime, 0, 1);
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.globalAlpha = Math.min(1, fade * 2);
+    ctx.font = "700 110px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 12;
+    ctx.strokeStyle = PAL.ink;
+    ctx.strokeText('VICTORY!', W/2, H/2 - 20);
+    ctx.fillStyle = '#ffd400';
+    ctx.fillText('VICTORY!', W/2, H/2 - 20);
+
+    ctx.font = "600 36px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = PAL.ink;
+    ctx.strokeText('JAM EVERYWHERE', W/2, H/2 + 40);
+    ctx.fillStyle = '#fff';
+    ctx.fillText('JAM EVERYWHERE', W/2, H/2 + 40);
+    ctx.restore();
+  }
 
   ctx.restore();
 
@@ -1466,7 +1812,11 @@ function loop(t) {
 function startGame() {
   document.getElementById('menu').classList.add('hidden');
   document.getElementById('endScreen').classList.add('hidden');
-  toasts = []; particles = []; explosions = []; floatTexts = [];
+  setGameClass(true);
+  toasts = []; particles = []; explosions = []; floatTexts = []; jamSplats = [];
+  victoryAnim.active = false;
+  victoryAnim.timer = 0;
+  victoryAnim.splatTimer = 0;
   player = makePlayer();
   boss = null;
   bossSpawned = false;
@@ -1484,6 +1834,7 @@ function startGame() {
 
 function endGame(won) {
   state = STATE.END;
+  setGameClass(false);
   AUDIO.stopBgm();
   endStats = {
     won,
@@ -1584,6 +1935,7 @@ function bindUI() {
   });
 
   buildFlavorMenu();
+  setupTouchControls();
 }
 
 if (document.readyState === 'loading') {
