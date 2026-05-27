@@ -1,28 +1,28 @@
-/** Jam flavors — 3 couleurs pour le menu et le jeu. */
+/** Jam flavors — three colors for the menu and in-game jam. */
 export const JAM_FLAVORS = [
   {
-    id: 'strawberry',
-    name: 'Strawberry',
-    tagline: 'Berry early riser',
-    jam: '#e63946',
-    jamLight: '#ff8fa3',
-    uiAccent: '#e63946',
+    id: 'blueberry',
+    name: 'Blueberry',
+    tagline: 'Blue mood, sweet attitude',
+    jam: '#3d2a7a',
+    jamLight: '#6c52c4',
+    uiAccent: '#3d2a7a',
   },
   {
     id: 'apricot',
     name: 'Apricot',
     tagline: 'Orange you jammy?',
-    jam: '#f77f00',
-    jamLight: '#ffbf69',
-    uiAccent: '#e85d04',
+    jam: '#e8862a',
+    jamLight: '#ffc070',
+    uiAccent: '#c25800',
   },
   {
     id: 'raspberry',
     name: 'Raspberry',
     tagline: 'Toast of the jam',
-    jam: '#cc2244',
-    jamLight: '#ff5577',
-    uiAccent: '#cc2244',
+    jam: '#c91f4a',
+    jamLight: '#ff7099',
+    uiAccent: '#c91f4a',
   },
 ];
 
@@ -44,9 +44,9 @@ export function getJamFlavor(id) {
 }
 
 export let activeJamPalette = {
-  jam: '#cc2244',
-  jamLight: '#ff5577',
-  uiAccent: '#cc2244',
+  jam: '#c91f4a',
+  jamLight: '#ff7099',
+  uiAccent: '#c91f4a',
 };
 
 export function setActiveJamPalette(flavor) {

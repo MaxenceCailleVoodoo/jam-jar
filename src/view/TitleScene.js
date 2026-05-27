@@ -1,8 +1,9 @@
-import { ARENA } from './styles/sharedSurvival.js';
+import { ARENA, BGM_VOLUME } from './styles/sharedSurvival.js';
 import { JAM_FLAVORS, DEFAULT_JAM_ID, pickBreakfastQuip } from './jamFlavors.js';
 import {
   DOODLE_PALETTE, buildPaperTexture, drawInkFrame, crispDoodleText,
 } from './doodleTheme.js';
+import { loadBest } from './persistence.js';
 
 const KEY = 'TitleScene';
 const PAPER_KEY = 'title-paper';
@@ -30,7 +31,6 @@ export class TitleScene extends Phaser.Scene {
     this.buildFlavorPicker();
     this.buildStartPrompt();
     this.setupInput();
-    this.startBgm();
   }
 
   buildTitle() {
@@ -194,6 +194,15 @@ export class TitleScene extends Phaser.Scene {
       color: DOODLE_PALETTE.uiText,
     }).setOrigin(0.5).setDepth(30).setAlpha(0.8);
 
+    const best = loadBest();
+    if (best.bestScore > 0 || best.wins > 0) {
+      crispDoodleText(
+        this, W / 2, 622,
+        `best  ${best.bestScore}  ·  toasts ${best.bestKills}  ·  wins ${best.wins}`,
+        { fontSize: '14px', fontStyle: 'bold', color: DOODLE_PALETTE.uiAccent },
+      ).setOrigin(0.5).setDepth(30).setAlpha(0.9);
+    }
+
     crispDoodleText(this, W / 2, H - 32, 'no waffles were harmed (many toasts were)', {
       fontSize: '13px',
       fontStyle: 'italic',
@@ -210,16 +219,21 @@ export class TitleScene extends Phaser.Scene {
     this._leftHeld = false;
     this._rightHeld = false;
     this._startHeld = false;
+    this.input.once('pointerdown', () => this.startBgm());
+    this.input.keyboard?.once('keydown', () => this.startBgm());
   }
 
   startBgm() {
     if (!this.cache.audio.exists('bgm')) return;
+    const ctx = this.sound.context;
+    if (ctx?.state === 'suspended') ctx.resume();
     let bgm = this.sound.get('bgm');
-    if (!bgm) bgm = this.sound.add('bgm', { loop: true, volume: 0.38 });
+    if (!bgm) bgm = this.sound.add('bgm', { loop: true, volume: BGM_VOLUME });
     if (!bgm.isPlaying) bgm.play();
   }
 
   launchGame() {
+    this.startBgm();
     const flavor = JAM_FLAVORS[this.selectedIndex];
     this.registry.set('jamFlavor', flavor.id);
     this.cameras.main.fadeOut(300, 245, 239, 222);

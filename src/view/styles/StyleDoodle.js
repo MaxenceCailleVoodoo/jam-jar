@@ -1,6 +1,6 @@
 /**
- * Jeu 2 Confiture — Watercolor Doodle.
- * Charge dans le pot, explosion rayon / wipe, tartines pain de mie.
+ * Jam Ops — Watercolor Doodle.
+ * Charge the jar, radius / wipe explosion, white-bread toast enemies.
  */
 import {
   ARENA, SURVIVAL,
@@ -10,10 +10,14 @@ import {
   killEnemiesStaggered,
   QUIPS_DOODLE, QUIPS_DEATH, pickQuip,
   playJamExplosion,
+  BGM_VOLUME,
 } from './sharedSurvival.js';
 import {
   getJamFlavor, setActiveJamPalette, activeJamPalette, DEFAULT_JAM_ID,
 } from '../jamFlavors.js';
+import { DOODLE_FONT, crispDoodleText } from '../doodleTheme.js';
+import { loadBest, recordRun } from '../persistence.js';
+import { TouchControls } from '../input/TouchControls.js';
 
 const KEY = 'StyleDoodle';
 
@@ -53,7 +57,7 @@ const JAR_SCALE = 0.5;
 const JAR_W = 180;
 const JAR_H = 220;
 
-/** Cavité confiture visible à travers le pot. */
+/** Jam cavity visible through the jar glass. */
 const JAR_FILL_POLY = [
   [0.22, 0.30], [0.20, 0.52], [0.26, 0.88], [0.50, 0.91],
   [0.74, 0.88], [0.80, 0.52], [0.78, 0.30],
@@ -67,7 +71,7 @@ function makeCanvas(w, h) {
   return { canvas: c, ctx };
 }
 
-/** Mulberry32 PRNG pour wobble déterministe par frame. */
+/** Mulberry32 PRNG for deterministic per-frame wobble. */
 function rng(seed) {
   let s = seed >>> 0;
   return () => {
@@ -104,7 +108,7 @@ function wobblyPath(ctx, points, jitter, rand, close = true) {
   return jittered;
 }
 
-/** crackLevel: 0 = intact, 1 = fêlure (1 PV). La confiture est dessinée via jamFill. */
+/** crackLevel: 0 = intact, 1 = cracked (1 HP). Jam fill is drawn via jamFill. */
 function drawJarFrame(W, H, crackLevel, seed) {
   const { canvas, ctx } = makeCanvas(W, H);
   const rand = rng(seed);
@@ -183,10 +187,18 @@ function drawJarFrame(W, H, crackLevel, seed) {
   if (crackLevel >= 1) {
     ctx.strokeStyle = PALETTE.ink;
     ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(W * 0.4, H * 0.38);
-    ctx.lineTo(W * 0.44, H * 0.55);
-    ctx.lineTo(W * 0.41, H * 0.72);
+    ctx.moveTo(W * 0.28, H * 0.78);
+    ctx.lineTo(W * 0.40, H * 0.80);
+    ctx.lineTo(W * 0.52, H * 0.78);
+    ctx.lineTo(W * 0.66, H * 0.81);
+    ctx.lineTo(W * 0.74, H * 0.79);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(W * 0.34, H * 0.84);
+    ctx.lineTo(W * 0.48, H * 0.85);
+    ctx.lineTo(W * 0.60, H * 0.83);
     ctx.stroke();
   }
 
@@ -238,7 +250,7 @@ function roundRectPath(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-/** Le Grille-Pain Titan — boss doodle chrome + confiture. */
+/** Titan Toaster boss — doodle chrome + jam accents. */
 function drawToasterFrame(W, H, seed) {
   const { canvas, ctx } = makeCanvas(W, H);
   const rand = rng(seed);
@@ -530,7 +542,7 @@ function intersectAtY(a, b, y) {
   return { x: a.x + t * (b.x - a.x), y };
 }
 
-/** Garde la partie du polygone sous la surface (y >= surfaceY). */
+/** Keep the polygon part below the fill surface (y >= surfaceY). */
 function clipPolygonAtMinY(points, surfaceY) {
   const out = [];
   const n = points.length;
@@ -626,9 +638,13 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.flavor = getJamFlavor(id);
     this.registry.set('jamFlavor', this.flavor.id);
     setActiveJamPalette(this.flavor);
-    this._chargeLabelKey = '';
+    this._restarting = false;
+    this.uiJamHex = this.flavor.jam;
     this.jamColor = Phaser.Display.Color.HexStringToColor(this.flavor.jam).color;
     this.jamLightColor = Phaser.Display.Color.HexStringToColor(this.flavor.jamLight).color;
+    const shaded = Phaser.Display.Color.IntegerToColor(this.jamColor);
+    shaded.darken(10);
+    this.jamDeepColor = shaded.color;
     this.jamAccent = this.flavor.uiAccent;
   }
 
@@ -683,8 +699,9 @@ export class StyleDoodleScene extends Phaser.Scene {
     this._bossTimerKey = '';
 
     this.jamFill = this.add.graphics().setDepth(19);
-    this.jarFx = this.add.graphics().setDepth(22);
     this.jarCracks = this.add.graphics().setDepth(21).setVisible(false);
+    this._lastFillKey = null;
+    this._lastCrackKey = null;
 
     this.player = this.physics.add.sprite(
       ARENA.width / 2, ARENA.height / 2, this.jarAnim.firstKey,
@@ -713,62 +730,58 @@ export class StyleDoodleScene extends Phaser.Scene {
     });
 
     this.add.text(28, 18, 'score', {
-      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
+      fontFamily: DOODLE_FONT,
       fontSize: '18px', color: PALETTE.uiText,
     }).setDepth(100);
 
     this.hudScore = this.add.text(28, 36, '0', {
-      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
-      fontSize: '40px', fontStyle: 'bold', color: PALETTE.uiAccent,
+      fontFamily: DOODLE_FONT,
+      fontSize: '40px', fontStyle: 'bold', color: this.uiJamHex,
     }).setDepth(100);
 
-    this.hudHp = this.add.text(28, 88, 'pot intact', {
-      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
-      fontSize: '18px', color: PALETTE.uiAccent,
+    this.hudHp = this.add.text(28, 84, 'jar intact', {
+      fontFamily: DOODLE_FONT,
+      fontSize: '18px', color: this.uiJamHex,
     }).setDepth(100);
 
-    this.hudKills = this.add.text(28, 112, `tartines : 0 / ${BOSS_KILL_THRESHOLD}`, {
-      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
-      fontSize: '16px', color: PALETTE.uiText,
-    }).setDepth(100);
+    const toastHudY = 118;
+    this.hudKillsLabel = crispDoodleText(
+      this, 28, toastHudY,
+      `${BOSS_KILL_THRESHOLD} toasts until boss`,
+      { fontSize: '14px', color: PALETTE.uiText },
+    ).setOrigin(0, 0).setDepth(100);
+
+    const toastRowY = toastHudY + 30;
+    this.hudKillsIcon = this.add.image(28, toastRowY, 'toast-slice')
+      .setOrigin(0, 0.5).setDepth(100)
+      .setDisplaySize(26, 26);
+    this.hudKillsCount = crispDoodleText(
+      this, 60, toastRowY, `0 / ${BOSS_KILL_THRESHOLD}`,
+      { fontSize: '20px', fontStyle: 'bold', color: this.uiJamHex },
+    ).setOrigin(0, 0.5).setDepth(100);
 
     this.hudBossTimer = this.add.text(ARENA.width / 2, 28, '', {
-      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
-      fontSize: '28px', fontStyle: 'bold', color: '#cc4400',
+      fontFamily: DOODLE_FONT,
+      fontSize: '28px', fontStyle: 'bold', color: this.uiJamHex,
       stroke: '#ffffff', strokeThickness: 4,
     }).setOrigin(0.5, 0).setDepth(102).setAlpha(0);
 
-    this.attackLabel = this.add.text(ARENA.width - 28, 22, 'SPACE = exploser', {
-      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
-      fontSize: '22px', fontStyle: 'bold', color: PALETTE.uiText,
-    }).setOrigin(1, 0).setDepth(100);
-
-    this.attackHint = this.add.text(ARENA.width - 28, 50, `plein = wipe · ${BOSS_KILL_THRESHOLD} tartines = boss`, {
-      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
-      fontSize: '13px', color: PALETTE.uiText,
-    }).setOrigin(1, 0).setDepth(100);
-
-    this.chargeLabel = this.add.text(ARENA.width - 28, 72, 'charge 0%', {
-      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
-      fontSize: '16px', fontStyle: 'bold', color: this.jamAccent,
-    }).setOrigin(1, 0).setDepth(100);
-
     this.hudCombo = this.add.text(ARENA.width / 2, ARENA.height * 0.22, '', {
-      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
-      fontSize: '64px', fontStyle: 'bold', color: PALETTE.uiAccent,
+      fontFamily: DOODLE_FONT,
+      fontSize: '64px', fontStyle: 'bold', color: this.uiJamHex,
       stroke: '#ffffff', strokeThickness: 6,
     }).setOrigin(0.5).setDepth(101).setAlpha(0);
 
-    this.add.text(ARENA.width - 28, ARENA.height - 24, 'R rejouer', {
-      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
+    this.add.text(ARENA.width - 28, ARENA.height - 24, 'R to replay', {
+      fontFamily: DOODLE_FONT,
       fontSize: '14px', color: PALETTE.uiText,
     }).setOrigin(1, 1).setDepth(100);
 
     this.input.keyboard.once('keydown', () => this.ensureBgm());
 
-    this.explodeBtn = this.add.text(ARENA.width / 2, ARENA.height - 48, '[ SPACE ] exploser', {
-      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
-      fontSize: '20px', fontStyle: 'bold', color: PALETTE.uiAccent,
+    this.explodeBtn = this.add.text(ARENA.width / 2, ARENA.height - 48, '[ SPACE ] explode', {
+      fontFamily: DOODLE_FONT,
+      fontSize: '20px', fontStyle: 'bold', color: this.uiJamHex,
       backgroundColor: '#f5efde', padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setDepth(100).setInteractive({ useHandCursor: true });
     this.explodeBtn.on('pointerdown', () => {
@@ -776,11 +789,104 @@ export class StyleDoodleScene extends Phaser.Scene {
       this.tryExplode();
     });
 
+    this.chargeMeter = this.add.graphics().setDepth(100);
+    this.chargeMeterRect = {
+      x: ARENA.width / 2 - 120, y: ARENA.height - 22, w: 240, h: 10,
+    };
+    this._lastChargeDrawn = -1;
+    this.drawChargeMeter(this.charge);
+
+    this.best = loadBest();
+    this.hudBest = crispDoodleText(
+      this,
+      ARENA.width - 24,
+      16,
+      this.formatBestHudText(),
+      {
+        fontSize: '17px',
+        color: PALETTE.uiText,
+        align: 'right',
+        lineSpacing: 4,
+      },
+    ).setOrigin(1, 0).setDepth(100);
+
+    this.touchControls = new TouchControls();
+    this.touchControls.attach(this, {
+      onExplode: () => {
+        this.ensureBgm();
+        this.tryExplode();
+      },
+    });
+  }
+
+  getBestDisplayStats() {
+    const saved = this.best ?? loadBest();
+    return {
+      score: Math.max(saved.bestScore, this.score ?? 0),
+      kills: Math.max(saved.bestKills, this.totalToastKills ?? 0),
+      maxCombo: Math.max(saved.bestMaxCombo, this.maxKillsInOneShot ?? 0),
+      wins: saved.wins,
+    };
+  }
+
+  formatBestHudText() {
+    const d = this.getBestDisplayStats();
+    return [
+      'BEST',
+      `Score  ${d.score.toLocaleString()}`,
+      `Toasts  ${d.kills}`,
+      `Wins  ${d.wins}`,
+    ].join('\n');
+  }
+
+  refreshBestHud() {
+    this.hudBest?.setText(this.formatBestHudText());
+  }
+
+  drawChargeMeter(ratio) {
+    const clamped = Phaser.Math.Clamp(ratio, 0, 1);
+    if (Math.abs(clamped - this._lastChargeDrawn) < 0.01) return;
+    this._lastChargeDrawn = clamped;
+
+    const { x, y, w, h } = this.chargeMeterRect;
+    const g = this.chargeMeter;
+    g.clear();
+    g.fillStyle(0xffffff, 0.85);
+    g.fillRoundedRect(x, y, w, h, 5);
+    g.lineStyle(2, 0x2a1810, 0.7);
+    g.strokeRoundedRect(x, y, w, h, 5);
+
+    const fillW = Math.max(0, (w - 4) * clamped);
+    const isFull = clamped >= 0.999;
+    g.fillStyle(isFull ? this.jamLightColor : this.jamColor, 1);
+    g.fillRoundedRect(x + 2, y + 2, fillW, h - 4, 4);
+
+    if (isFull) {
+      g.lineStyle(2, this.jamLightColor, 0.85);
+      g.strokeRoundedRect(x - 1, y - 1, w + 2, h + 2, 6);
+    }
   }
 
   restartGame() {
+    if (this._restarting) return;
+    this._restarting = true;
+    this.tweens.killAll();
+    this.time.removeAllEvents();
     const flavorId = this.flavor?.id ?? this.registry.get('jamFlavor') ?? DEFAULT_JAM_ID;
     this.scene.restart({ flavorId });
+  }
+
+  bindEndScreenRestart(cx, y) {
+    this.input.enabled = true;
+    const restartBtn = this.add.text(cx, y, 'R or click — replay', {
+      fontFamily: DOODLE_FONT,
+      fontSize: '20px',
+      fontStyle: 'bold',
+      color: this.uiJamHex ?? this.jamAccent,
+      backgroundColor: '#ffffff',
+      padding: { x: 14, y: 8 },
+    }).setOrigin(0.5).setDepth(203).setInteractive({ useHandCursor: true });
+    restartBtn.once('pointerdown', () => this.restartGame());
   }
 
   bindKeyboardActions() {
@@ -820,15 +926,6 @@ export class StyleDoodleScene extends Phaser.Scene {
     kb.off('keydown-R', this._onRestartDown);
     kb.on('keydown-R', this._onRestartDown);
 
-    this._windowKeyHandler = (event) => {
-      if (!event || event.repeat) return;
-      if (event.code === 'KeyR' || event.key === 'r' || event.key === 'R') {
-        event.preventDefault();
-        this.restartGame();
-      }
-    };
-    window.addEventListener('keydown', this._windowKeyHandler);
-
     this.events.once('shutdown', () => {
       this.enemySpawnEvent?.remove();
       this.bossEjectEvent?.remove();
@@ -837,13 +934,15 @@ export class StyleDoodleScene extends Phaser.Scene {
       kb.off('keydown-SPACE', this._onSpaceDown);
       this.restartKey?.off('down', this._onRestartDown);
       kb.off('keydown-R', this._onRestartDown);
-      window.removeEventListener('keydown', this._windowKeyHandler);
+      this.touchControls?.detach();
     });
   }
 
   ensureBgm() {
+    const ctx = this.sound.context;
+    if (ctx?.state === 'suspended') ctx.resume();
     let bgm = this.sound.get('bgm');
-    if (!bgm) bgm = this.sound.add('bgm', { loop: true, volume: 0.45 });
+    if (!bgm) bgm = this.sound.add('bgm', { loop: true, volume: BGM_VOLUME });
     if (!bgm.isPlaying) bgm.play();
   }
 
@@ -871,123 +970,116 @@ export class StyleDoodleScene extends Phaser.Scene {
     if (this.boss?.active) this.boss.setData('frozen', false);
   }
 
-  drawJarCracks() {
+  drawJarCracks(force = false) {
     const g = this.jarCracks;
-    g.clear();
-    if (this.hp > 1 || !this.player.visible) return;
+    if (this.hp > 1 || !this.player.visible) {
+      if (this._lastCrackKey !== 'off') {
+        g.clear();
+        this._lastCrackKey = 'off';
+      }
+      return;
+    }
+    const x = this.player.x | 0;
+    const y = this.player.y | 0;
+    const key = `${x}|${y}`;
+    if (!force && key === this._lastCrackKey) return;
+    this._lastCrackKey = key;
+
     const w = this.player.displayWidth;
     const h = this.player.displayHeight;
-    const x = this.player.x;
-    const y = this.player.y;
-    g.lineStyle(3, 0x2a1810, 0.85);
-    g.beginPath();
-    g.moveTo(x - w * 0.08, y - h * 0.12);
-    g.lineTo(x - w * 0.02, y + h * 0.05);
-    g.lineTo(x - w * 0.06, y + h * 0.22);
-    g.stroke();
-    g.beginPath();
-    g.moveTo(x + w * 0.1, y - h * 0.08);
-    g.lineTo(x + w * 0.04, y + h * 0.12);
-    g.stroke();
-  }
-
-  drawJamOverflow(x, y, t) {
-    const g = this.jarFx;
     g.clear();
-    const s = JAR_SCALE;
-    const lidY = y - (JAR_H * s) / 2 + JAR_H * 0.22 * s;
-
-    for (let i = 0; i < 5; i++) {
-      const phase = t / 380 + i * 1.35;
-      const dx = Math.cos(phase) * (18 + i * 4) * s;
-      const dy = Math.sin(phase * 1.2) * 6 * s - 8 * s;
-      g.fillStyle(0xcc2244, 0.88);
-      g.fillEllipse(x + dx, lidY + dy, 7 * s, 11 * s);
-      g.fillStyle(0xff5577, 0.55);
-      g.fillEllipse(x + dx, lidY + dy - 3 * s, 4 * s, 5 * s);
-    }
-
-    for (let i = 0; i < 6; i++) {
-      const phase = t / 520 + i * 0.95;
-      const sx = x + Math.cos(phase) * 38 * s;
-      const sy = lidY - 12 * s + Math.sin(phase * 1.4) * 10 * s;
-      const size = (5 + (i % 3) * 2) * s;
-      const alpha = 0.45 + 0.35 * Math.sin(t / 200 + i);
-      g.fillStyle(0xffaac8, alpha);
-      g.beginPath();
-      for (let p = 0; p < 5; p++) {
-        const a = (p / 5) * Math.PI * 2 - Math.PI / 2;
-        const r = p % 2 === 0 ? size : size * 0.42;
-        const px = sx + Math.cos(a) * r;
-        const py = sy + Math.sin(a) * r;
-        if (p === 0) g.moveTo(px, py);
-        else g.lineTo(px, py);
-      }
-      g.closePath();
-      g.fillPath();
-    }
+    g.lineStyle(3, 0x2a1810, 0.85);
+    g.lineCap = 'round';
+    const bellyY = y + h * 0.28;
+    g.beginPath();
+    g.moveTo(x - w * 0.22, bellyY);
+    g.lineTo(x - w * 0.08, bellyY + h * 0.02);
+    g.lineTo(x + w * 0.04, bellyY - h * 0.01);
+    g.lineTo(x + w * 0.18, bellyY + h * 0.02);
+    g.lineTo(x + w * 0.26, bellyY);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(x - w * 0.14, bellyY + h * 0.06);
+    g.lineTo(x + w * 0.02, bellyY + h * 0.07);
+    g.lineTo(x + w * 0.16, bellyY + h * 0.05);
+    g.stroke();
   }
 
-  syncChargeLabel(ratio) {
-    const key = ratio >= 0.999 ? 'full' : `${Math.round(ratio * 100)}`;
-    if (key === this._chargeLabelKey) return;
-    this._chargeLabelKey = key;
-    this.chargeLabel.setText(key === 'full' ? 'PLEIN !' : `charge ${key}%`);
-    this.chargeLabel.setColor(this.jamAccent);
+  fillJamShape(g, points) {
+    if (!points || points.length < 3) return;
+    g.fillStyle(this.jamColor, 1);
+    g.beginPath();
+    g.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) g.lineTo(points[i].x, points[i].y);
+    g.closePath();
+    g.fillPath();
+  }
+
+  drawFullMeniscus(worldPoly) {
+    const left = worldPoly[0];
+    const right = worldPoly[worldPoly.length - 1];
+    if (!left || !right) return;
+    const midX = (left.x + right.x) / 2;
+    const neckY = (left.y + right.y) / 2;
+    const neckW = right.x - left.x;
+    this.jamFill.fillStyle(this.jamLightColor, 0.32);
+    this.jamFill.fillEllipse(midX, neckY - 1, neckW * 0.4, 5);
   }
 
   updateJarFill() {
     if (!this.player.visible) {
-      this.jamFill.clear();
-      this.jarFx.clear();
-      this.jarCracks.clear();
+      if (this._lastFillKey !== 'hidden') {
+        this.jamFill.clear();
+        this.jarCracks.clear();
+        this._lastFillKey = 'hidden';
+        this._lastCrackKey = null;
+      }
       return;
     }
 
     const ratio = Phaser.Math.Clamp(this.charge, 0, 1);
-    this.syncChargeLabel(ratio);
-    const x = this.player.x;
-    const y = this.player.y;
+    const isFull = ratio >= 0.999;
+    const px = this.player.x | 0;
+    const py = this.player.y | 0;
+    const ratioBucket = Math.round(ratio * 200);
+    const fillKey = `${px}|${py}|${ratioBucket}`;
+
+    this.drawJarCracks();
+
+    if (fillKey === this._lastFillKey) return;
+    this._lastFillKey = fillKey;
+
     const s = JAR_SCALE;
     const worldPoly = jarPolyWorld(this.player, s);
     const ys = worldPoly.map((p) => p.y);
     const bottom = Math.max(...ys);
     const top = Math.min(...ys);
-    const surfaceY = bottom - (bottom - top) * ratio;
+    const surfaceY = isFull ? top : bottom - (bottom - top) * ratio;
 
     this.jamFill.clear();
-    this.jarFx.clear();
-    this.drawJarCracks();
 
     if (ratio < 0.01) {
       this.player.clearTint();
       return;
     }
 
-    const clipped = clipPolygonAtMinY(worldPoly, surfaceY);
-    if (clipped.length >= 3) {
-      const jamColor = ratio >= 0.999 ? this.jamLightColor : this.jamColor;
-      this.jamFill.fillStyle(jamColor, 0.94);
-      this.jamFill.beginPath();
-      this.jamFill.moveTo(clipped[0].x, clipped[0].y);
-      for (let i = 1; i < clipped.length; i++) {
-        this.jamFill.lineTo(clipped[i].x, clipped[i].y);
+    if (isFull) {
+      this.fillJamShape(this.jamFill, worldPoly);
+      this.drawFullMeniscus(worldPoly);
+    } else {
+      const clipped = clipPolygonAtMinY(worldPoly, surfaceY);
+      if (clipped.length >= 3) {
+        this.fillJamShape(this.jamFill, clipped);
+        const surfPts = clipped.filter((p) => Math.abs(p.y - surfaceY) < 3 * s);
+        if (surfPts.length) {
+          const surfX = surfPts.reduce((a, p) => a + p.x, 0) / surfPts.length;
+          this.jamFill.fillStyle(this.jamLightColor, 0.25);
+          this.jamFill.fillEllipse(surfX, surfaceY + 2 * s, JAR_W * s * 0.36, 6 * s);
+        }
       }
-      this.jamFill.closePath();
-      this.jamFill.fillPath();
-
-      const surfacePts = clipped.filter((p) => Math.abs(p.y - surfaceY) < 2 * s);
-      const surfX = surfacePts.length
-        ? surfacePts.reduce((a, p) => a + p.x, 0) / surfacePts.length
-        : x;
-      this.jamFill.fillStyle(this.jamLightColor, 0.55);
-      this.jamFill.fillEllipse(surfX, surfaceY + 3 * s, 34 * s, 11 * s);
-      this.jamFill.fillStyle(this.jamLightColor, 0.35);
-      this.jamFill.fillEllipse(surfX - 8 * s, surfaceY + 5 * s, 12 * s, 5 * s);
     }
 
     this.player.clearTint();
-    if (ratio >= 0.999) this.drawJamOverflow(x, y, this.time.now);
   }
 
   refreshJarAppearance() {
@@ -997,7 +1089,8 @@ export class StyleDoodleScene extends Phaser.Scene {
       this.player.play(this.jarAnim.animKey);
     }
     this.jarCracks.setVisible(this.hp <= 1);
-    this.drawJarCracks();
+    this._lastCrackKey = null;
+    this.drawJarCracks(true);
   }
 
   spawnEnemy() {
@@ -1016,9 +1109,16 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.enemySpawnEvent.delay = spawnIntervalFor(this.time.now - this.startTime);
   }
 
+  setToastKillHudVisible(visible) {
+    this.hudKillsLabel?.setVisible(visible);
+    this.hudKillsIcon?.setVisible(visible);
+    this.hudKillsCount?.setVisible(visible);
+  }
+
   registerToastKill() {
     this.totalToastKills += 1;
-    this.hudKills?.setText(`tartines : ${this.totalToastKills} / ${BOSS_KILL_THRESHOLD}`);
+    this.hudKillsCount?.setText(`${this.totalToastKills} / ${BOSS_KILL_THRESHOLD}`);
+    this.refreshBestHud();
     if (!this.bossTriggered && this.totalToastKills >= BOSS_KILL_THRESHOLD) {
       this.bossTriggered = true;
       this.scheduleBossIntro();
@@ -1041,6 +1141,7 @@ export class StyleDoodleScene extends Phaser.Scene {
 
   startBossIntro() {
     this.bossPhase = 'intro';
+    this.setToastKillHudVisible(false);
     this.isCinematic = true;
     this.enemySpawnEvent.paused = true;
     this.freezeEnemies();
@@ -1049,14 +1150,14 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.enemies.children.iterate((e) => { if (e?.active) victims.push(e); });
     killEnemiesStaggered(this, victims, ARENA.width / 2, ARENA.height / 2, 40);
 
-    this.showSplashText('THIS IS THE BOSS', {
+    this.showSplashText('BOSS INCOMING', {
       holdMs: BOSS_SPLASH_HOLD_MS,
       fadeInMs: BOSS_SPLASH_FADE_IN_MS,
       fadeOutMs: BOSS_SPLASH_FADE_OUT_MS,
       fontSize: 84,
       onComplete: () => {
         if (!this.alive) return;
-        this.popBigText(ARENA.width / 2, ARENA.height * 0.32, 'LE GRILLE-PAIN\nTITAN !');
+        this.popBigText(ARENA.width / 2, ARENA.height * 0.32, 'THE TITAN\nTOASTER!');
         this.time.delayedCall(1100, () => {
           if (!this.alive) return;
           this.isCinematic = false;
@@ -1112,10 +1213,9 @@ export class StyleDoodleScene extends Phaser.Scene {
       ? `${sm}:${ss < 10 ? '0' : ''}${ss}`
       : `0:${ss < 10 ? '0' : ''}${ss}`;
     this.hudBossTimer.setAlpha(1);
-    this.hudBossTimer.setText(`Survis : ${surviveLabel}`);
-    this.attackHint.setText(`esquive les tartines — ${surviveSec} s`);
+    this.hudBossTimer.setText(`Survive: ${surviveLabel}`);
 
-    this.popBigText(cx, cy - 80, `SURVIS ${surviveSec} S !`);
+    this.popBigText(cx, cy - 80, `SURVIVE ${surviveSec}S!`);
 
     this.bossEjectEvent = this.time.addEvent({
       delay: BOSS_EJECT_INTERVAL_MS,
@@ -1235,7 +1335,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     const timerKey = `${m}:${s}`;
     if (timerKey !== this._bossTimerKey) {
       this._bossTimerKey = timerKey;
-      this.hudBossTimer.setText(`Survis : ${m}:${s < 10 ? '0' : ''}${s}`);
+      this.hudBossTimer.setText(`Survive: ${m}:${s < 10 ? '0' : ''}${s}`);
     }
 
     if (leftMs <= 0) this.finishBossVictory();
@@ -1248,7 +1348,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.bossEjectEvent = null;
     this.invincibleUntil = this.time.now + 999999;
 
-    this.popBigText(ARENA.width / 2, ARENA.height * 0.4, 'LA NAPPE\nS\'EFFONDRE !');
+    this.popBigText(ARENA.width / 2, ARENA.height * 0.4, 'THE TABLECLOTH\nCOLLAPSES!');
     this.cameras.main.shake(500, 0.025);
 
     this.bossHazards.children.iterate((c) => { if (c?.active) c.destroy(); });
@@ -1270,7 +1370,10 @@ export class StyleDoodleScene extends Phaser.Scene {
       });
     }
 
-    const fallTargets = [this.player, this.hudScore, this.hudHp, this.hudKills, this.attackLabel];
+    const fallTargets = [
+      this.player, this.hudScore, this.hudHp,
+      this.hudKillsLabel, this.hudKillsIcon, this.hudKillsCount,
+    ];
     fallTargets.forEach((obj) => {
       if (!obj) return;
       this.tweens.add({
@@ -1290,7 +1393,15 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.explodeBtn?.setVisible(false);
 
     const cx = ARENA.width / 2;
-    const font = '"Comic Sans MS", "Marker Felt", cursive';
+
+    const persisted = recordRun({
+      score: this.score,
+      kills: this.totalToastKills,
+      maxCombo: this.maxKillsInOneShot,
+      won: true,
+    });
+    this.best = persisted.record;
+    this.refreshBestHud();
 
     this.add.rectangle(cx, ARENA.height / 2, ARENA.width, ARENA.height, 0xf5efde, 0.92).setDepth(200);
     const card = this.add.graphics().setDepth(201);
@@ -1299,42 +1410,34 @@ export class StyleDoodleScene extends Phaser.Scene {
     card.lineStyle(6, 0x1a1410, 0.9);
     card.strokeRoundedRect(cx - 300, ARENA.height / 2 - 200, 600, 400, 14);
 
-    this.add.text(cx, ARENA.height * 0.28, 'PETIT-DÉJ SAUVÉ !', {
-      fontFamily: font, fontSize: '36px', fontStyle: 'bold', color: this.jamAccent,
+    this.add.text(cx, ARENA.height * 0.28, 'BREAKFAST SAVED!', {
+      fontFamily: DOODLE_FONT, fontSize: '36px', fontStyle: 'bold', color: this.uiJamHex,
     }).setOrigin(0.5).setDepth(202);
 
-    this.add.text(cx, ARENA.height * 0.38, 'Le Grille-Pain Titan a décampé.', {
-      fontFamily: font, fontSize: '20px', color: PALETTE.uiText,
+    this.add.text(cx, ARENA.height * 0.38, 'The Titan Toaster has fled.', {
+      fontFamily: DOODLE_FONT, fontSize: '20px', color: PALETTE.uiText,
     }).setOrigin(0.5).setDepth(202);
 
     const lines = [
-      `Score : ${this.score}`,
-      `Tartines : ${this.totalToastKills}`,
-      `Max en 1 coup : ${this.maxKillsInOneShot}`,
+      `Score: ${this.score}${persisted.isNewBestScore ? '  (NEW BEST!)' : ''}`,
+      `Toasts: ${this.totalToastKills}${persisted.isNewBestKills ? '  (NEW BEST!)' : ''}`,
+      `Max in one shot: ${this.maxKillsInOneShot}${persisted.isNewBestMaxCombo ? '  (NEW BEST!)' : ''}`,
+      `Best score: ${this.best.bestScore}  ·  Wins: ${this.best.wins}`,
     ];
     lines.forEach((line, i) => {
-      this.add.text(cx, ARENA.height * (0.46 + i * 0.07), line, {
-        fontFamily: font, fontSize: '22px', color: PALETTE.uiText,
+      this.add.text(cx, ARENA.height * (0.46 + i * 0.06), line, {
+        fontFamily: DOODLE_FONT, fontSize: '20px', color: PALETTE.uiText,
       }).setOrigin(0.5).setDepth(202);
     });
 
-    const restartBtn = this.add.text(cx, ARENA.height * 0.68, 'R ou clic — rejouer', {
-      fontFamily: font, fontSize: '20px', fontStyle: 'bold', color: this.jamAccent,
-      backgroundColor: '#ffffff', padding: { x: 14, y: 8 },
-    }).setOrigin(0.5).setDepth(202).setInteractive({ useHandCursor: true });
-    restartBtn.on('pointerdown', () => this.restartGame());
-
-    this.add.zone(cx, ARENA.height / 2, ARENA.width, ARENA.height)
-      .setInteractive()
-      .setDepth(199)
-      .on('pointerdown', () => this.restartGame());
+    this.bindEndScreenRestart(cx, ARENA.height * 0.72);
   }
 
   tryExplode() {
     if (!this.alive) return;
     if (this.isExploding || this.isCinematic) return;
     if (this.charge < CHARGE_MIN_TO_FIRE) {
-      this.popText(this.player.x, this.player.y - 70, 'pas encore chargé…');
+      this.popText(this.player.x, this.player.y - 70, 'not charged yet…');
       return;
     }
     this.doChargedExplosion();
@@ -1346,9 +1449,9 @@ export class StyleDoodleScene extends Phaser.Scene {
 
     this.hp = SURVIVAL.playerHp;
     this.refreshJarAppearance();
-    this.hudHp.setText('pot intact');
+    this.hudHp.setText('jar intact');
     this.player.clearTint();
-    this.popBigText(this.player.x, this.player.y - 60, 'POT RÉPARÉ !');
+    this.popBigText(this.player.x, this.player.y - 60, 'JAR REPAIRED!');
     this.cameras.main.flash(200, 200, 255, 180);
   }
 
@@ -1365,7 +1468,7 @@ export class StyleDoodleScene extends Phaser.Scene {
     try {
       playJamExplosion(this);
     } catch {
-      // Audio optionnel — l'explosion visuelle continue.
+      // Optional audio — visual explosion still runs.
     }
 
     const jx = this.player.x; const jy = this.player.y;
@@ -1443,6 +1546,7 @@ export class StyleDoodleScene extends Phaser.Scene {
       const pts = scoreForCombo(killed);
       this.score += pts;
       this.hudScore.setText(`${this.score}`);
+      this.refreshBestHud();
       this.showCombo(killed, pts);
     }
 
@@ -1452,7 +1556,6 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.popBigText(jx, jy - 50, killed > 0 ? label : 'POUF');
 
     this.charge = 0;
-    this._chargeLabelKey = '';
     this.updateJarFill();
 
     const endCinematic = Math.max(CINEMATIC_MS, victims.length * 70 + 150);
@@ -1510,11 +1613,11 @@ export class StyleDoodleScene extends Phaser.Scene {
     this.tweens.add({ targets: overlay, alpha: 0.68, duration: fadeInMs * 0.5 });
 
     const splash = this.add.text(cx, cy, text, {
-      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
+      fontFamily: DOODLE_FONT,
       fontSize: `${fontSize}px`,
       fontStyle: 'bold',
       color: '#ffffff',
-      stroke: PALETTE.uiAccent,
+      stroke: this.uiJamHex,
       strokeThickness: 12,
       align: 'center',
     }).setOrigin(0.5).setDepth(151).setScale(2.6).setAlpha(0);
@@ -1547,7 +1650,7 @@ export class StyleDoodleScene extends Phaser.Scene {
 
   popBigText(x, y, text) {
     const t = this.add.text(x, y, text, {
-      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
+      fontFamily: DOODLE_FONT,
       fontSize: '64px', fontStyle: 'bold', color: '#ffffff',
       stroke: PALETTE.ink, strokeThickness: 8,
     }).setOrigin(0.5).setDepth(60).setScale(0.2).setAngle(Phaser.Math.Between(-10, 10));
@@ -1562,8 +1665,8 @@ export class StyleDoodleScene extends Phaser.Scene {
 
   popText(x, y, text) {
     const t = this.add.text(x, y, text, {
-      fontFamily: '"Comic Sans MS", "Marker Felt", cursive',
-      fontSize: '20px', fontStyle: 'bold', color: PALETTE.uiAccent,
+      fontFamily: DOODLE_FONT,
+      fontSize: '20px', fontStyle: 'bold', color: this.uiJamHex,
       stroke: '#ffffff', strokeThickness: 3,
     }).setOrigin(0.5).setDepth(55).setAngle(Phaser.Math.Between(-12, 12));
     this.tweens.add({
@@ -1582,7 +1685,7 @@ export class StyleDoodleScene extends Phaser.Scene {
 
     if (this.hp === 1) {
       this.refreshJarAppearance();
-      this.hudHp.setText('pot fêlé…');
+      this.hudHp.setText('jar cracked…');
       this.tweens.add({
         targets: this.player,
         angle: { from: -6, to: 6 },
@@ -1602,7 +1705,6 @@ export class StyleDoodleScene extends Phaser.Scene {
     const dx0 = this.player.x; const dy0 = this.player.y;
     this.player.setVisible(false);
     this.jamFill.clear();
-    this.jarFx.clear();
     this.jarCracks.clear();
 
     for (let i = 0; i < 12; i++) {
@@ -1644,6 +1746,15 @@ export class StyleDoodleScene extends Phaser.Scene {
       ? (this.totalKillsInExplosions / this.explosionCount).toFixed(1)
       : '0';
 
+    const persisted = recordRun({
+      score: this.score,
+      kills: this.totalToastKills,
+      maxCombo: this.maxKillsInOneShot,
+      won: false,
+    });
+    this.best = persisted.record;
+    this.refreshBestHud();
+
     this.add.rectangle(ARENA.width / 2, ARENA.height / 2, ARENA.width, ARENA.height, 0xf5efde, 0.92).setDepth(200);
     const card = this.add.graphics().setDepth(201);
     card.fillStyle(0xffffff, 1);
@@ -1651,38 +1762,29 @@ export class StyleDoodleScene extends Phaser.Scene {
     card.lineStyle(6, 0x1a1410, 0.9);
     card.strokeRoundedRect(ARENA.width / 2 - 300, ARENA.height / 2 - 200, 600, 400, 14);
 
-    const font = '"Comic Sans MS", "Marker Felt", cursive';
     const cx = ARENA.width / 2;
 
     this.add.text(cx, ARENA.height * 0.28, pickQuip(QUIPS_DEATH), {
-      fontFamily: font, fontSize: '36px', fontStyle: 'bold', color: PALETTE.uiAccent,
+      fontFamily: DOODLE_FONT, fontSize: '36px', fontStyle: 'bold', color: this.uiJamHex,
     }).setOrigin(0.5).setDepth(202).setAngle(Phaser.Math.Between(-3, 3));
 
     this.add.text(cx, ARENA.height * 0.38, 'Stats', {
-      fontFamily: font, fontSize: '22px', color: PALETTE.uiText,
+      fontFamily: DOODLE_FONT, fontSize: '22px', color: PALETTE.uiText,
     }).setOrigin(0.5).setDepth(202);
 
     const lines = [
-      `Score : ${this.score}`,
-      `Max tartines en 1 coup : ${this.maxKillsInOneShot}`,
-      `Moyenne par coup : ${avgKills}`,
+      `Score: ${this.score}${persisted.isNewBestScore ? '  (NEW BEST!)' : ''}`,
+      `Max toasts in one shot: ${this.maxKillsInOneShot}${persisted.isNewBestMaxCombo ? '  (NEW BEST!)' : ''}`,
+      `Average per shot: ${avgKills}`,
+      `Best: ${this.best.bestScore}  ·  Toasts ${this.best.bestKills}  ·  Wins ${this.best.wins}`,
     ];
     lines.forEach((line, i) => {
-      this.add.text(cx, ARENA.height * (0.44 + i * 0.07), line, {
-        fontFamily: font, fontSize: '24px', color: PALETTE.uiText,
+      this.add.text(cx, ARENA.height * (0.44 + i * 0.065), line, {
+        fontFamily: DOODLE_FONT, fontSize: '22px', color: PALETTE.uiText,
       }).setOrigin(0.5).setDepth(202);
     });
 
-    const restartBtn = this.add.text(cx, ARENA.height * 0.68, 'R ou clic — rejouer', {
-      fontFamily: font, fontSize: '20px', fontStyle: 'bold', color: PALETTE.uiAccent,
-      backgroundColor: '#ffffff', padding: { x: 14, y: 8 },
-    }).setOrigin(0.5).setDepth(202).setInteractive({ useHandCursor: true });
-    restartBtn.on('pointerdown', () => this.restartGame());
-
-    this.add.zone(cx, ARENA.height / 2, ARENA.width, ARENA.height)
-      .setInteractive()
-      .setDepth(199)
-      .on('pointerdown', () => this.restartGame());
+    this.bindEndScreenRestart(cx, ARENA.height * 0.72);
   }
 
   update() {
@@ -1708,11 +1810,15 @@ export class StyleDoodleScene extends Phaser.Scene {
       this.charge = Math.min(1, this.charge + dt / CHARGE_FULL_MS);
     }
 
-    const { vx, vy } = readMovementInput(this);
+    const kb = readMovementInput(this);
+    const touch = this.touchControls?.getMovement?.() ?? { vx: 0, vy: 0 };
+    const vx = Math.abs(touch.vx) + Math.abs(touch.vy) > 0 ? touch.vx : kb.vx;
+    const vy = Math.abs(touch.vx) + Math.abs(touch.vy) > 0 ? touch.vy : kb.vy;
     const speed = 230;
     this.player.body.setVelocity(vx * speed, vy * speed);
 
     this.updateJarFill();
+    this.drawChargeMeter(this.charge);
 
     if (!this.isCinematic) {
       const speedNow = enemySpeedFor(this.time.now - this.startTime);

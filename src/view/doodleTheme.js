@@ -9,18 +9,16 @@ export const DOODLE_PALETTE = {
   crust: '#7a4818',
 };
 
-export const DOODLE_FONT = 'Arial, Helvetica, sans-serif';
+export const DOODLE_FONT = '"Patrick Hand", "Comic Sans MS", cursive';
 
-/** Résolution texte = DPR × zoom FIT pour éviter le flou. */
+/** Match Phaser renderer DPR so text stays sharp under FIT scaling. */
 export function textResolution(scene) {
-  const canvas = scene?.game?.canvas;
-  const gameW = scene?.scale?.gameSize?.width ?? 1280;
-  const fitScale = canvas?.clientWidth ? canvas.clientWidth / gameW : 1;
+  const zoom = scene?.scale?.zoom ?? 1;
   const dpr = window.devicePixelRatio || 1;
-  return Math.min(Math.ceil(dpr * fitScale * 1.25), 4);
+  return Math.min(Math.max(Math.ceil(dpr * zoom), 2), 4);
 }
 
-/** Texte net sur canvas redimensionné (pas de scale sur le GameObject). */
+/** Crisp text on a resized canvas (no scale on the GameObject). */
 export function crispDoodleText(scene, x, y, text, style = {}) {
   const resolution = textResolution(scene);
   const t = scene.add.text(Math.round(x), Math.round(y), text, {

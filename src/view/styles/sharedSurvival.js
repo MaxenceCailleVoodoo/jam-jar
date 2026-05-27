@@ -1,7 +1,6 @@
 /**
- * Logique partagée par les 3 prototypes smooth.
- * Mécanique : esquiver les tartines + appuyer sur SPACE pour déclencher
- * une attaque "JAM" (globale ou en rayon selon le style).
+ * Shared survival logic for smooth prototypes.
+ * Dodge toasts + press SPACE to trigger a JAM attack (global or radius per style).
  */
 
 export const ARENA = {
@@ -35,7 +34,7 @@ export function setupMovementInput(scene) {
   scene._restartHeld = false;
 }
 
-/** Front montant fiable (évite les soucis avec JustDown / addCapture). */
+/** Reliable rising-edge (avoids JustDown / addCapture quirks). */
 export function consumeKeyPress(scene, key, heldFlag) {
   const down = key?.isDown ?? false;
   const pressed = down && !scene[heldFlag];
@@ -169,17 +168,17 @@ export const QUIPS_NEON = [
 
 export const QUIPS_DOODLE = [
   'splat!',
-  'oh non du pain',
-  'mode confiture',
+  'oh no, bread',
+  'jam mode',
   'pof!',
   'gloup',
   'bye toast',
 ];
 
 export const QUIPS_DEATH = [
-  'POT FRACASSÉ',
+  'JAR SMASHED',
   'GAME OVER',
-  'CONFITURE RÉPANDUE',
+  'JAM EVERYWHERE',
 ];
 
 export function pickQuip(arr) {
@@ -187,12 +186,17 @@ export function pickQuip(arr) {
 }
 
 const JAM_EXPLOSION_VOLUME = 0.9;
-const JAM_EXPLOSION_FALLBACK_MS = 3200;
+const JAM_EXPLOSION_FALLBACK_MS = 2300;
 
-/** Pause la BGM, joue l'explosion confiture, puis remet la BGM. */
+export const BGM_VOLUME = 0.42;
+
+/** Pause BGM, play jam explosion SFX, then resume BGM. */
 export function playJamExplosion(scene) {
   const sm = scene.sound;
   if (!sm) return;
+
+  const ctx = sm.context;
+  if (ctx?.state === 'suspended') ctx.resume();
 
   const bgm = sm.get('bgm');
 
@@ -202,13 +206,6 @@ export function playJamExplosion(scene) {
     bgm.setData('jamExplosionWasPlaying', bgm.isPlaying);
     if (bgm.isPlaying) bgm.pause();
   }
-
-  if (!scene.cache?.audio?.exists('jam-explosion')) return;
-
-  let sfx = sm.get('jam-explosion');
-  if (!sfx) sfx = sm.add('jam-explosion', { volume: JAM_EXPLOSION_VOLUME });
-  if (!sfx) return;
-  if (sfx.isPlaying) sfx.stop();
 
   let restored = false;
   const restoreBgm = () => {
@@ -226,8 +223,25 @@ export function playJamExplosion(scene) {
     if (wasPlaying && !bgm.isPlaying) bgm.play();
   };
 
+  if (!scene.cache?.audio?.exists('jam-explosion')) {
+    restoreBgm();
+    return;
+  }
+
+  let sfx = sm.get('jam-explosion');
+  if (!sfx) sfx = sm.add('jam-explosion', { volume: JAM_EXPLOSION_VOLUME });
+  if (!sfx) {
+    restoreBgm();
+    return;
+  }
+  if (sfx.isPlaying) sfx.stop();
+
+  const durationMs = sfx.duration > 0
+    ? Math.ceil(sfx.duration * 1000) + 150
+    : JAM_EXPLOSION_FALLBACK_MS;
+
   sfx.once('complete', restoreBgm);
-  scene.time.delayedCall(JAM_EXPLOSION_FALLBACK_MS, restoreBgm);
+  scene.time.delayedCall(durationMs, restoreBgm);
   try {
     sfx.play();
   } catch {
