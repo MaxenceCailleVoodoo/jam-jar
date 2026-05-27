@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
-<title>JAM JAR vs TOASTS</title>
+<title>Game Jam</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
@@ -35,6 +35,10 @@
     width: auto;
     height: auto;
   }
+  body.touch canvas {
+    box-shadow: none;
+    border-radius: 0;
+  }
   /* Touch controls (visible only on touch devices) */
   .touch-controls {
     position: absolute;
@@ -44,16 +48,17 @@
     display: none;
   }
   body.touch.in-game .touch-controls { display: block; }
+  body.touch.portrait .touch-controls { display: none !important; }
   body.touch .hud-tip { display: none; }
   .joystick {
     position: absolute;
-    bottom: 28px;
-    right: 28px;
-    width: 150px;
-    height: 150px;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    right: max(16px, env(safe-area-inset-right));
+    width: 130px;
+    height: 130px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.18);
-    border: 4px solid rgba(0,0,0,0.28);
+    background: rgba(255,255,255,0.12);
+    border: 3px solid rgba(0,0,0,0.22);
     pointer-events: auto;
     touch-action: none;
     -webkit-user-select: none;
@@ -62,24 +67,24 @@
   .joystick-knob {
     position: absolute;
     top: 50%; left: 50%;
-    width: 68px; height: 68px;
-    margin: -34px 0 0 -34px;
+    width: 58px; height: 58px;
+    margin: -29px 0 0 -29px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.55);
-    border: 4px solid rgba(0,0,0,0.38);
+    background: rgba(255,255,255,0.45);
+    border: 3px solid rgba(0,0,0,0.3);
     pointer-events: none;
     transition: background 0.1s;
   }
-  .joystick.active .joystick-knob { background: rgba(255,255,255,0.85); }
+  .joystick.active .joystick-knob { background: rgba(255,255,255,0.8); }
   .blast-btn {
     position: absolute;
-    bottom: 28px;
-    left: 28px;
-    width: 128px;
-    height: 128px;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    left: max(16px, env(safe-area-inset-left));
+    width: 100px;
+    height: 100px;
     border-radius: 50%;
-    background: rgba(255,180,40,0.38);
-    border: 5px solid rgba(0,0,0,0.38);
+    background: rgba(255,180,40,0.32);
+    border: 3px solid rgba(0,0,0,0.3);
     pointer-events: auto;
     touch-action: none;
     -webkit-user-select: none;
@@ -90,24 +95,52 @@
     justify-content: center;
     font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
     font-weight: 700;
-    font-size: 22px;
+    font-size: 16px;
     letter-spacing: 1px;
     color: #fff;
-    text-shadow: 2px 2px 0 rgba(0,0,0,0.4);
+    text-shadow: 1px 1px 0 rgba(0,0,0,0.5);
     transition: transform 0.06s, background 0.1s;
   }
   .blast-btn::after {
     content: '💥';
-    font-size: 28px;
-    margin-top: 2px;
+    font-size: 22px;
+    margin-top: 0;
   }
   .blast-btn.active, .blast-btn:active {
-    background: rgba(255,200,60,0.75);
+    background: rgba(255,200,60,0.7);
     transform: scale(0.92);
   }
   .blast-btn.cooldown {
-    background: rgba(120,120,120,0.35);
-    color: rgba(255,255,255,0.6);
+    background: rgba(120,120,120,0.3);
+    color: rgba(255,255,255,0.5);
+  }
+
+  /* Rotate to landscape overlay (mobile portrait only) */
+  .rotate-hint {
+    position: absolute;
+    inset: 0;
+    background: rgba(20,12,8,0.94);
+    color: #fff;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    text-align: center;
+    padding: 24px;
+    font-family: system-ui, sans-serif;
+  }
+  .rotate-hint .icon {
+    font-size: 72px;
+    margin-bottom: 18px;
+    animation: rotate-anim 2.4s ease-in-out infinite;
+  }
+  .rotate-hint h3 { font-size: 28px; margin-bottom: 8px; font-weight: 700; }
+  .rotate-hint p { font-size: 16px; opacity: 0.85; max-width: 280px; line-height: 1.4; }
+  body.touch.portrait .rotate-hint { display: flex; }
+  @keyframes rotate-anim {
+    0%, 40% { transform: rotate(0deg); }
+    60%, 100% { transform: rotate(-90deg); }
   }
   .overlay {
     position: absolute; inset: 0;
@@ -134,12 +167,16 @@
   }
   .overlay h2 {
     font-family: system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-    font-weight: 600;
-    font-size: 40px;
-    margin-bottom: 28px;
-    letter-spacing: 3px;
+    font-weight: 700;
+    font-size: 76px;
+    line-height: .95;
+    letter-spacing: 1px;
     color: var(--jam, #d4395e);
-    text-shadow: 3px 3px 0 rgba(0,0,0,.1);
+    text-shadow:
+      5px 5px 0 var(--ink, #3a2a1a),
+      7px 7px 0 rgba(0,0,0,.16);
+    transform: rotate(-2deg);
+    margin-bottom: 24px;
   }
   .overlay p {
     max-width: 720px;
@@ -233,24 +270,32 @@
     font-family: Georgia, serif;
     letter-spacing: 1px;
   }
-  /* ==== MOBILE / SMALL SCREENS ==== */
-  @media (max-width: 720px) {
-    .overlay { padding: 20px; }
-    .overlay h1 { font-size: 56px; text-shadow: 3px 3px 0 var(--jam, #d4395e), 4px 4px 0 rgba(0,0,0,.18); margin-bottom: 2px; }
-    .overlay h2 { font-size: 26px; margin-bottom: 16px; }
-    .overlay p { font-size: 14px; line-height: 1.4; margin-bottom: 8px; max-width: 92%; }
-    .overlay .small { font-size: 12px; }
-    .flavors { gap: 10px; flex-wrap: wrap; justify-content: center; margin: 18px 0 6px; }
-    .flavor { width: 100px; padding: 12px 6px; border-width: 3px; }
-    .flavor .swatch { width: 50px; height: 50px; margin: 0 auto 8px; }
-    .flavor .name { font-size: 13px; letter-spacing: 0.2px; }
-    button.play { font-size: 22px; padding: 12px 32px; margin-top: 14px; letter-spacing: 1px; }
-    .stats { font-size: 14px; padding: 14px 18px; min-width: 0; width: 92%; }
-    .stats b { min-width: 130px; font-size: 13px; }
-    .joystick { width: 120px; height: 120px; bottom: 18px; right: 18px; border-width: 3px; }
-    .joystick-knob { width: 56px; height: 56px; margin: -28px 0 0 -28px; border-width: 3px; }
-    .blast-btn { width: 100px; height: 100px; bottom: 18px; left: 18px; font-size: 17px; border-width: 4px; }
-    .blast-btn::after { font-size: 22px; }
+  /* ==== MOBILE / SMALL SCREENS (portrait phones AND short landscape) ==== */
+  @media (max-width: 720px), (max-height: 500px) {
+    .overlay { padding: 12px; }
+    .overlay h1 { font-size: 48px; text-shadow: 3px 3px 0 var(--jam, #d4395e), 4px 4px 0 rgba(0,0,0,.18); margin-bottom: 0; }
+    .overlay h2 { font-size: 38px; text-shadow: 3px 3px 0 var(--ink, #3a2a1a), 4px 4px 0 rgba(0,0,0,.18); margin-bottom: 10px; }
+    .overlay p { font-size: 13px; line-height: 1.35; margin-bottom: 6px; max-width: 92%; }
+    .overlay .small { font-size: 11px; margin-top: 10px; }
+    .flavors { gap: 10px; flex-wrap: wrap; justify-content: center; margin: 12px 0 4px; }
+    .flavor { width: 96px; padding: 10px 6px; border-width: 3px; }
+    .flavor .swatch { width: 44px; height: 44px; margin: 0 auto 6px; }
+    .flavor .name { font-size: 12px; letter-spacing: 0.2px; }
+    button.play { font-size: 20px; padding: 10px 28px; margin-top: 10px; letter-spacing: 1px; }
+    .stats { font-size: 13px; padding: 12px 16px; min-width: 0; width: 92%; margin-bottom: 12px; }
+    .stats b { min-width: 110px; font-size: 12px; }
+    .stats div { margin: 3px 0; }
+    .joystick { width: 110px; height: 110px; }
+    .joystick-knob { width: 48px; height: 48px; margin: -24px 0 0 -24px; }
+    .blast-btn { width: 88px; height: 88px; font-size: 13px; }
+    .blast-btn::after { font-size: 18px; }
+  }
+  /* Landscape phone — pull controls in slightly so they don't crowd the action */
+  @media (orientation: landscape) and (max-height: 500px) {
+    .joystick { width: 100px; height: 100px; }
+    .joystick-knob { width: 44px; height: 44px; margin: -22px 0 0 -22px; }
+    .blast-btn { width: 84px; height: 84px; font-size: 13px; }
+    .blast-btn::after { font-size: 16px; }
   }
 </style>
 </head>
@@ -260,8 +305,8 @@
 
   <!-- Main menu -->
   <div class="overlay" id="menu">
-    <h1>JAM JAR</h1>
-    <h2>vs. TOASTS</h2>
+    <h1>GAME</h1>
+    <h2>JAM</h2>
     <p>Dodge the hungry toasts. Your jam charges automatically. Blast to wipe them out.</p>
     <p>Blast <b style="color:var(--jam,#d4395e)">20+ toasts in one shot</b> to refill your jar to full HP.</p>
     <p>Crush the <i>Toaster Titan</i> to claim victory.</p>
@@ -290,17 +335,25 @@
       <div class="joystick-knob" id="joyKnob"></div>
     </div>
   </div>
+
+  <!-- Portrait rotation hint (mobile portrait only) -->
+  <div class="rotate-hint">
+    <div class="icon">📱</div>
+    <h3>Rotate your phone</h3>
+    <p>Game Jam is built for landscape mode — turn your device sideways to play.</p>
+  </div>
 </div>
 
 <script>
 // =============================================================
-//   JAM JAR vs TOASTS
+//   GAME JAM
 //   Single-file HTML5 canvas game · vanilla JS
 // =============================================================
 
 const cvs = document.getElementById('game');
 const ctx = cvs.getContext('2d');
-const W = cvs.width, H = cvs.height;
+let W = cvs.width, H = cvs.height;
+let canvasDpr = 1;
 
 // ----- Palettes / flavors -----
 const FLAVORS = {
@@ -1333,6 +1386,56 @@ if (isTouchDevice) {
 }
 function setGameClass(on) {
   document.body.classList.toggle('in-game', on);
+}
+
+// Dynamic canvas sizing — on touch devices, fill the viewport
+function resizeCanvas() {
+  if (!isTouchDevice) return;
+  const vw = Math.max(320, window.innerWidth);
+  const vh = Math.max(240, window.innerHeight);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvasDpr = dpr;
+  W = vw;
+  H = vh;
+  cvs.width = Math.round(W * dpr);
+  cvs.height = Math.round(H * dpr);
+  cvs.style.width = W + 'px';
+  cvs.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  paperTexture.cache = null;
+  if (player) {
+    player.x = clamp(player.x, 36, W-36);
+    player.y = clamp(player.y, 50, H-50);
+  }
+  if (boss) {
+    boss.x = clamp(boss.x, 130, W-130);
+    boss.y = clamp(boss.y, 60, 220);
+  }
+}
+
+function updateOrientationClass() {
+  if (!isTouchDevice) return;
+  const portrait = window.innerHeight > window.innerWidth;
+  document.body.classList.toggle('portrait', portrait);
+  // Auto-pause the game in portrait (it's unplayable)
+  if (state === STATE.PLAYING || state === STATE.BOSS) {
+    if (portrait && !paused) {
+      paused = true;
+      AUDIO.pauseBgm();
+    } else if (!portrait && paused) {
+      paused = false;
+      AUDIO.resumeBgm();
+    }
+  }
+}
+
+if (isTouchDevice) {
+  // delay initial resize until after DOM is ready
+  setTimeout(() => { resizeCanvas(); updateOrientationClass(); }, 0);
+  window.addEventListener('resize', () => { resizeCanvas(); updateOrientationClass(); });
+  window.addEventListener('orientationchange', () => {
+    setTimeout(() => { resizeCanvas(); updateOrientationClass(); }, 200);
+  });
 }
 
 // Joystick handling
