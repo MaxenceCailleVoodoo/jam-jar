@@ -48,8 +48,8 @@
   body.touch .hud-tip { display: none; }
   .joystick {
     position: absolute;
-    bottom: 14px;
-    right: 14px;
+    bottom: 56px;
+    right: 44px;
     width: 92px;
     height: 92px;
     border-radius: 50%;
@@ -74,8 +74,8 @@
   .joystick.active .joystick-knob { background: rgba(255,255,255,0.85); }
   .blast-btn {
     position: absolute;
-    bottom: 14px;
-    left: 14px;
+    bottom: 56px;
+    left: 44px;
     width: 76px;
     height: 76px;
     border-radius: 50%;
@@ -1387,11 +1387,13 @@ function updateControlPositions() {
   if (!blastBtn || !joystick || !wrap) return;
   const r = cvs.getBoundingClientRect();
   const wr = wrap.getBoundingClientRect();
-  const m = 10;
-  // Distance from wrap edges to canvas edges + margin
-  const leftOff = (r.left - wr.left) + m;
-  const rightOff = (wr.right - r.right) + m;
-  const bottomOff = (wr.bottom - r.bottom) + m;
+  // Generous inset so the thumb has room to push the joystick in any direction
+  // (incl. toward the corners) without the screen edge blocking it.
+  const sideInset = 44;
+  const bottomInset = 56;
+  const leftOff = (r.left - wr.left) + sideInset;
+  const rightOff = (wr.right - r.right) + sideInset;
+  const bottomOff = (wr.bottom - r.bottom) + bottomInset;
   blastBtn.style.left = leftOff + 'px';
   blastBtn.style.right = 'auto';
   blastBtn.style.bottom = bottomOff + 'px';
