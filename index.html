@@ -1796,9 +1796,9 @@ function drawHUD() {
     ctx.restore();
   }
 
-  // Charge bar (chunky) — at the bottom of the screen
+  // Charge bar (chunky) — anchored near the bottom, counter sits just below it
   const cw = 560, ch = 30;
-  const cxp = (W - cw)/2, cyp = H - 56;
+  const cxp = (W - cw)/2, cyp = H - 72;
   const onCd = player.cooldown > 0;
   // backdrop
   ctx.fillStyle = onCd ? 'rgba(0,0,0,.22)' : 'rgba(0,0,0,.12)';
@@ -1833,76 +1833,42 @@ function drawHUD() {
   }
   inkStroke(()=>{ ctx.rect(cxp, cyp, cw, ch); }, PAL.ink, 3);
 
-  // Charge bar always carries a small jam label on the left, so it's clearly
-  // identified as the "jam loading" UI vs the targets badge near the player.
   const fullCharge = player.charge >= 0.985;
-  ctx.textAlign = 'left';
-  ctx.font = "700 13px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = PAL.ink;
-  ctx.strokeText('🫙 JAM', cxp, cyp - 8);
-  ctx.fillStyle = 'rgba(255,255,255,.85)';
-  ctx.fillText('🫙 JAM', cxp, cyp - 8);
 
-  // Status callout above the bar (only when meaningful)
-  if (onCd) {
-    ctx.textAlign = 'center';
-    ctx.font = "700 18px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = PAL.ink;
-    ctx.strokeText('RECHARGING…', W/2, cyp - 10);
-    ctx.fillStyle = '#bcd2ff';
-    ctx.fillText('RECHARGING…', W/2, cyp - 10);
-  } else if (fullCharge) {
-    ctx.textAlign = 'center';
-    ctx.font = "700 20px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = PAL.ink;
-    ctx.strokeText('FULL CHARGE', W/2, cyp - 10);
-    ctx.fillStyle = '#ffba00';
-    ctx.fillText('FULL CHARGE', W/2, cyp - 10);
-  }
-
-  // Toasts-in-blast counter — floating right next to the player's blast circle
+  // Toasts-in-blast counter — anchored at the bottom of the screen
   const rawR = fullCharge ? Math.hypot(W,H) : lerp(CFG.minRadius, CFG.maxRadius, player.charge);
   let inRange = 0;
   const rSq = rawR * rawR;
   for (const t of toasts) {
     if (dist2(t.x, t.y, player.x, player.y) <= rSq) inRange++;
   }
-  // Position counter on top of the player's blast preview circle, clamped to canvas
-  const previewR = Math.min(rawR, lerp(CFG.minRadius, CFG.maxRadius, 1));
-  let badgeY = player.y - previewR - 14;
-  if (badgeY < 32) badgeY = player.y + previewR + 28;  // flip below if no room above
-  const badgeX = clamp(player.x, 80, W - 80);
 
-  // Targets counter (clearly different look : white pill-style, not a bar)
   ctx.textAlign = 'center';
   ctx.font = "700 22px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
   let counterColor;
   if (inRange >= CFG.killHeal) counterColor = '#ffd400';
   else if (inRange >= 10) counterColor = PAL.glow;
   else if (inRange >= 3) counterColor = '#fff';
-  else counterColor = 'rgba(255,255,255,.7)';
+  else counterColor = inRange === 0 ? 'rgba(255,255,255,.55)' : '#fff';
 
-  const tLabel = `🎯 ${inRange}`;
-  // Strong outline for readability against any bg
+  const tLabel = `${inRange} IN BLAST`;
+  const counterY = H - 16;
   ctx.lineJoin = 'round';
-  ctx.lineWidth = 7;
+  ctx.lineWidth = 5;
   ctx.strokeStyle = PAL.ink;
-  ctx.strokeText(tLabel, badgeX, badgeY);
+  ctx.strokeText(tLabel, W/2, counterY);
   ctx.fillStyle = counterColor;
-  ctx.fillText(tLabel, badgeX, badgeY);
+  ctx.fillText(tLabel, W/2, counterY);
 
-  // Heal-threshold hint right under the badge
+  // Heal-threshold hint sits above the counter so it stays on-screen
   if (inRange >= CFG.killHeal) {
     ctx.font = "700 14px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 3;
     ctx.strokeStyle = PAL.ink;
-    const heal = 'FULL HEAL!';
-    ctx.strokeText(heal, badgeX, badgeY + 18);
+    const heal = 'FULL HEAL READY!';
+    ctx.strokeText(heal, W/2, counterY - 22);
     ctx.fillStyle = '#ffd400';
-    ctx.fillText(heal, badgeX, badgeY + 18);
+    ctx.fillText(heal, W/2, counterY - 22);
   }
 
   ctx.restore();
