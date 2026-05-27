@@ -35,10 +35,6 @@
     width: auto;
     height: auto;
   }
-  body.touch canvas {
-    box-shadow: none;
-    border-radius: 0;
-  }
   /* Touch controls (visible only on touch devices) */
   .touch-controls {
     position: absolute;
@@ -52,13 +48,13 @@
   body.touch .hud-tip { display: none; }
   .joystick {
     position: absolute;
-    bottom: max(16px, env(safe-area-inset-bottom));
-    right: max(16px, env(safe-area-inset-right));
-    width: 130px;
-    height: 130px;
+    bottom: 14px;
+    right: 14px;
+    width: 92px;
+    height: 92px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.12);
-    border: 3px solid rgba(0,0,0,0.22);
+    background: rgba(255,255,255,0.1);
+    border: 2px solid rgba(0,0,0,0.22);
     pointer-events: auto;
     touch-action: none;
     -webkit-user-select: none;
@@ -67,24 +63,24 @@
   .joystick-knob {
     position: absolute;
     top: 50%; left: 50%;
-    width: 58px; height: 58px;
-    margin: -29px 0 0 -29px;
+    width: 40px; height: 40px;
+    margin: -20px 0 0 -20px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.45);
-    border: 3px solid rgba(0,0,0,0.3);
+    background: rgba(255,255,255,0.5);
+    border: 2px solid rgba(0,0,0,0.28);
     pointer-events: none;
     transition: background 0.1s;
   }
-  .joystick.active .joystick-knob { background: rgba(255,255,255,0.8); }
+  .joystick.active .joystick-knob { background: rgba(255,255,255,0.85); }
   .blast-btn {
     position: absolute;
-    bottom: max(16px, env(safe-area-inset-bottom));
-    left: max(16px, env(safe-area-inset-left));
-    width: 100px;
-    height: 100px;
+    bottom: 14px;
+    left: 14px;
+    width: 76px;
+    height: 76px;
     border-radius: 50%;
     background: rgba(255,180,40,0.32);
-    border: 3px solid rgba(0,0,0,0.3);
+    border: 2px solid rgba(0,0,0,0.28);
     pointer-events: auto;
     touch-action: none;
     -webkit-user-select: none;
@@ -95,16 +91,16 @@
     justify-content: center;
     font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
     font-weight: 700;
-    font-size: 16px;
-    letter-spacing: 1px;
+    font-size: 12px;
+    letter-spacing: 0.5px;
     color: #fff;
     text-shadow: 1px 1px 0 rgba(0,0,0,0.5);
     transition: transform 0.06s, background 0.1s;
   }
   .blast-btn::after {
     content: '💥';
-    font-size: 22px;
-    margin-top: 0;
+    font-size: 18px;
+    margin-top: -2px;
   }
   .blast-btn.active, .blast-btn:active {
     background: rgba(255,200,60,0.7);
@@ -285,16 +281,9 @@
     .stats { font-size: 13px; padding: 12px 16px; min-width: 0; width: 92%; margin-bottom: 12px; }
     .stats b { min-width: 110px; font-size: 12px; }
     .stats div { margin: 3px 0; }
-    .joystick { width: 110px; height: 110px; }
-    .joystick-knob { width: 48px; height: 48px; margin: -24px 0 0 -24px; }
-    .blast-btn { width: 88px; height: 88px; font-size: 13px; }
-    .blast-btn::after { font-size: 18px; }
-  }
-  /* Landscape phone — pull controls in slightly so they don't crowd the action */
-  @media (orientation: landscape) and (max-height: 500px) {
-    .joystick { width: 100px; height: 100px; }
-    .joystick-knob { width: 44px; height: 44px; margin: -22px 0 0 -22px; }
-    .blast-btn { width: 84px; height: 84px; font-size: 13px; }
+    .joystick { width: 84px; height: 84px; }
+    .joystick-knob { width: 36px; height: 36px; margin: -18px 0 0 -18px; }
+    .blast-btn { width: 68px; height: 68px; font-size: 11px; }
     .blast-btn::after { font-size: 16px; }
   }
 </style>
@@ -1388,29 +1377,27 @@ function setGameClass(on) {
   document.body.classList.toggle('in-game', on);
 }
 
-// Dynamic canvas sizing — on touch devices, fill the viewport
-function resizeCanvas() {
+// Canvas stays at its fixed logical size (1100×720). CSS handles display scaling
+// while preserving aspect ratio. Touch controls reposition to canvas edges.
+function updateControlPositions() {
   if (!isTouchDevice) return;
-  const vw = Math.max(320, window.innerWidth);
-  const vh = Math.max(240, window.innerHeight);
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvasDpr = dpr;
-  W = vw;
-  H = vh;
-  cvs.width = Math.round(W * dpr);
-  cvs.height = Math.round(H * dpr);
-  cvs.style.width = W + 'px';
-  cvs.style.height = H + 'px';
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  paperTexture.cache = null;
-  if (player) {
-    player.x = clamp(player.x, 36, W-36);
-    player.y = clamp(player.y, 50, H-50);
-  }
-  if (boss) {
-    boss.x = clamp(boss.x, 130, W-130);
-    boss.y = clamp(boss.y, 60, 220);
-  }
+  const blastBtn = document.getElementById('blastBtn');
+  const joystick = document.getElementById('joystick');
+  const wrap = document.getElementById('wrap');
+  if (!blastBtn || !joystick || !wrap) return;
+  const r = cvs.getBoundingClientRect();
+  const wr = wrap.getBoundingClientRect();
+  const m = 10;
+  // Distance from wrap edges to canvas edges + margin
+  const leftOff = (r.left - wr.left) + m;
+  const rightOff = (wr.right - r.right) + m;
+  const bottomOff = (wr.bottom - r.bottom) + m;
+  blastBtn.style.left = leftOff + 'px';
+  blastBtn.style.right = 'auto';
+  blastBtn.style.bottom = bottomOff + 'px';
+  joystick.style.right = rightOff + 'px';
+  joystick.style.left = 'auto';
+  joystick.style.bottom = bottomOff + 'px';
 }
 
 function updateOrientationClass() {
@@ -1430,12 +1417,10 @@ function updateOrientationClass() {
 }
 
 if (isTouchDevice) {
-  // delay initial resize until after DOM is ready
-  setTimeout(() => { resizeCanvas(); updateOrientationClass(); }, 0);
-  window.addEventListener('resize', () => { resizeCanvas(); updateOrientationClass(); });
-  window.addEventListener('orientationchange', () => {
-    setTimeout(() => { resizeCanvas(); updateOrientationClass(); }, 200);
-  });
+  const onLayoutChange = () => { updateControlPositions(); updateOrientationClass(); };
+  setTimeout(onLayoutChange, 0);
+  window.addEventListener('resize', onLayoutChange);
+  window.addEventListener('orientationchange', () => setTimeout(onLayoutChange, 200));
 }
 
 // Joystick handling
@@ -1808,9 +1793,9 @@ function drawHUD() {
     ctx.restore();
   }
 
-  // Charge bar (chunky) — lifted up so the in-blast counter fits underneath
+  // Charge bar (chunky) — at the bottom of the screen
   const cw = 560, ch = 30;
-  const cxp = (W - cw)/2, cyp = H - 96;
+  const cxp = (W - cw)/2, cyp = H - 56;
   const onCd = player.cooldown > 0;
   // backdrop
   ctx.fillStyle = onCd ? 'rgba(0,0,0,.22)' : 'rgba(0,0,0,.12)';
@@ -1845,57 +1830,76 @@ function drawHUD() {
   }
   inkStroke(()=>{ ctx.rect(cxp, cyp, cw, ch); }, PAL.ink, 3);
 
-  // Full-charge prompt OR cooldown indicator above the bar
+  // Charge bar always carries a small jam label on the left, so it's clearly
+  // identified as the "jam loading" UI vs the targets badge near the player.
   const fullCharge = player.charge >= 0.985;
+  ctx.textAlign = 'left';
+  ctx.font = "700 13px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = PAL.ink;
+  ctx.strokeText('🫙 JAM', cxp, cyp - 8);
+  ctx.fillStyle = 'rgba(255,255,255,.85)';
+  ctx.fillText('🫙 JAM', cxp, cyp - 8);
+
+  // Status callout above the bar (only when meaningful)
   if (onCd) {
     ctx.textAlign = 'center';
-    ctx.font = "700 20px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
-    ctx.lineWidth = 5;
+    ctx.font = "700 18px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    ctx.lineWidth = 4;
     ctx.strokeStyle = PAL.ink;
     ctx.strokeText('RECHARGING…', W/2, cyp - 10);
     ctx.fillStyle = '#bcd2ff';
     ctx.fillText('RECHARGING…', W/2, cyp - 10);
   } else if (fullCharge) {
     ctx.textAlign = 'center';
-    ctx.font = "700 22px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
-    ctx.lineWidth = 5;
+    ctx.font = "700 20px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    ctx.lineWidth = 4;
     ctx.strokeStyle = PAL.ink;
     ctx.strokeText('FULL CHARGE', W/2, cyp - 10);
     ctx.fillStyle = '#ffba00';
     ctx.fillText('FULL CHARGE', W/2, cyp - 10);
   }
 
-  // Toasts-in-blast counter — below the bar
+  // Toasts-in-blast counter — floating right next to the player's blast circle
   const rawR = fullCharge ? Math.hypot(W,H) : lerp(CFG.minRadius, CFG.maxRadius, player.charge);
   let inRange = 0;
   const rSq = rawR * rawR;
   for (const t of toasts) {
     if (dist2(t.x, t.y, player.x, player.y) <= rSq) inRange++;
   }
+  // Position counter on top of the player's blast preview circle, clamped to canvas
+  const previewR = Math.min(rawR, lerp(CFG.minRadius, CFG.maxRadius, 1));
+  let badgeY = player.y - previewR - 14;
+  if (badgeY < 32) badgeY = player.y + previewR + 28;  // flip below if no room above
+  const badgeX = clamp(player.x, 80, W - 80);
+
+  // Targets counter (clearly different look : white pill-style, not a bar)
   ctx.textAlign = 'center';
   ctx.font = "700 22px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = PAL.ink;
-  const tLabel = `${inRange} IN BLAST`;
-  const counterY = cyp + ch + 26;
-  ctx.strokeText(tLabel, W/2, counterY);
   let counterColor;
   if (inRange >= CFG.killHeal) counterColor = '#ffd400';
   else if (inRange >= 10) counterColor = PAL.glow;
   else if (inRange >= 3) counterColor = '#fff';
-  else counterColor = inRange === 0 ? 'rgba(255,255,255,.55)' : '#fff';
-  ctx.fillStyle = counterColor;
-  ctx.fillText(tLabel, W/2, counterY);
+  else counterColor = 'rgba(255,255,255,.7)';
 
-  // Heal-threshold hint (below counter, still on screen)
+  const tLabel = `🎯 ${inRange}`;
+  // Strong outline for readability against any bg
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 7;
+  ctx.strokeStyle = PAL.ink;
+  ctx.strokeText(tLabel, badgeX, badgeY);
+  ctx.fillStyle = counterColor;
+  ctx.fillText(tLabel, badgeX, badgeY);
+
+  // Heal-threshold hint right under the badge
   if (inRange >= CFG.killHeal) {
     ctx.font = "700 14px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 4;
     ctx.strokeStyle = PAL.ink;
-    const heal = 'FULL HEAL READY!';
-    ctx.strokeText(heal, W/2, counterY + 18);
+    const heal = 'FULL HEAL!';
+    ctx.strokeText(heal, badgeX, badgeY + 18);
     ctx.fillStyle = '#ffd400';
-    ctx.fillText(heal, W/2, counterY + 18);
+    ctx.fillText(heal, badgeX, badgeY + 18);
   }
 
   ctx.restore();
