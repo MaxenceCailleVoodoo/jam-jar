@@ -1,19 +1,1618 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Jam Ops</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet" />
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { background: #1a1208; overflow: hidden; }
-      canvas { display: block; margin: 0 auto; }
-    </style>
-  </head>
-  <body>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+<head>
+<meta charset="UTF-8">
+<title>JAM JAR vs TOASTS</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #f5ecdc;
+    font-family: system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: #3a2a1a;
+    overflow: hidden;
+    user-select: none;
+    cursor: crosshair;
+  }
+  #wrap {
+    position: relative;
+    width: 100vw; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+  canvas {
+    display: block;
+    background: #faf3e2;
+    box-shadow: 0 12px 40px rgba(90, 50, 30, .25);
+    border-radius: 6px;
+  }
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(245, 236, 220, .92);
+    pointer-events: auto;
+    text-align: center;
+    padding: 40px;
+    z-index: 5;
+  }
+  .overlay h1 {
+    font-family: system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 700;
+    font-size: 96px;
+    line-height: .95;
+    letter-spacing: 1px;
+    color: var(--ink, #3a2a1a);
+    text-shadow:
+      5px 5px 0 var(--jam, #d4395e),
+      7px 7px 0 rgba(0,0,0,.16);
+    transform: rotate(-2deg);
+    margin-bottom: 4px;
+  }
+  .overlay h2 {
+    font-family: system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 600;
+    font-size: 40px;
+    margin-bottom: 28px;
+    letter-spacing: 3px;
+    color: var(--jam, #d4395e);
+    text-shadow: 3px 3px 0 rgba(0,0,0,.1);
+  }
+  .overlay p {
+    max-width: 720px;
+    line-height: 1.5;
+    margin-bottom: 10px;
+    font-size: 20px;
+    font-family: Georgia, serif;
+    font-weight: normal;
+  }
+  .overlay .small {
+    font-size: 15px;
+    opacity: .8;
+    margin-top: 22px;
+    font-family: Georgia, serif;
+    font-weight: normal;
+    letter-spacing: 1px;
+  }
+  .flavors {
+    display: flex; gap: 22px;
+    margin: 32px 0 10px;
+  }
+  .flavor {
+    width: 150px; padding: 22px 10px;
+    border-radius: 16px;
+    background: rgba(255,255,255,.6);
+    border: 4px dashed rgba(0,0,0,.18);
+    cursor: pointer;
+    transition: transform .15s, border-color .15s, background .15s;
+    text-align: center;
+  }
+  .flavor:hover { transform: translateY(-6px) rotate(-2deg) scale(1.04); }
+  .flavor.selected { border-style: solid; transform: translateY(-4px); }
+  .flavor .swatch {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    margin: 0 auto 12px;
+    box-shadow: inset -10px -10px 0 rgba(0,0,0,.14);
+  }
+  .flavor .name {
+    font-family: system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 1px;
+  }
+  button.play {
+    margin-top: 26px;
+    font-family: system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 700;
+    font-size: 32px;
+    letter-spacing: 2px;
+    padding: 18px 56px;
+    border: none;
+    border-radius: 999px;
+    background: var(--ink, #3a2a1a);
+    color: #faf3e2;
+    cursor: pointer;
+    box-shadow: 6px 6px 0 rgba(0,0,0,.18);
+    transition: transform .1s;
+  }
+  button.play:hover { transform: translateY(-3px) rotate(-1deg); }
+  button.play:active { transform: translateY(3px); box-shadow: 2px 2px 0 rgba(0,0,0,.18); }
+  .stats {
+    background: rgba(255,255,255,.65);
+    border: 3px dashed rgba(0,0,0,.22);
+    border-radius: 14px;
+    padding: 22px 36px;
+    margin-bottom: 18px;
+    text-align: left;
+    font-size: 19px;
+    min-width: 380px;
+    font-family: Georgia, serif;
+    font-weight: normal;
+  }
+  .stats div { margin: 6px 0; }
+  .stats b {
+    display: inline-block;
+    min-width: 200px;
+    font-family: system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    letter-spacing: 1px;
+    font-weight: 700;
+    color: var(--jam, #d4395e);
+  }
+  .hidden { display: none !important; }
+  .hud-tip {
+    position: absolute;
+    bottom: 14px; left: 50%; transform: translateX(-50%);
+    font-size: 14px; opacity: .6;
+    pointer-events: none;
+    font-family: Georgia, serif;
+    letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="1100" height="720"></canvas>
+
+  <!-- Main menu -->
+  <div class="overlay" id="menu">
+    <h1>JAM JAR</h1>
+    <h2>vs. TOASTS</h2>
+    <p>Dodge the hungry toasts. Your jam charges automatically. Blast to wipe them out.</p>
+    <p>Blast <b style="color:var(--jam,#d4395e)">20+ toasts in one shot</b> to refill your jar to full HP.</p>
+    <p>Crush the <i>Toaster Titan</i> to claim victory.</p>
+    <div class="flavors" id="flavors"></div>
+    <button class="play" id="playBtn">PLAY</button>
+    <div class="small">
+      MOVE : <b>WASD</b> / <b>ARROWS</b> &nbsp;·&nbsp; BLAST : <b>SPACE</b> &nbsp;·&nbsp; PAUSE : <b>P</b> &nbsp;·&nbsp; MUTE : <b>M</b>
+    </div>
+  </div>
+
+  <!-- End screen -->
+  <div class="overlay hidden" id="endScreen">
+    <h1 id="endTitle">GAME OVER</h1>
+    <h2 id="endSub">The jar is shattered…</h2>
+    <div class="stats" id="endStats"></div>
+    <button class="play" id="replayBtn">REPLAY</button>
+    <button class="play" id="menuBtn" style="background:#a06850; margin-top:14px; font-size:24px; padding:12px 36px;">CHANGE FLAVOR</button>
+  </div>
+
+  <div class="hud-tip" id="tip">WASD / arrows to move — SPACE to blast (charge fills automatically) — M to mute</div>
+</div>
+
+<script>
+// =============================================================
+//   JAM JAR vs TOASTS
+//   Single-file HTML5 canvas game · vanilla JS
+// =============================================================
+
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const W = cvs.width, H = cvs.height;
+
+// ----- Palettes / flavors -----
+const FLAVORS = {
+  strawberry: {
+    name: 'STRAWBERRY',
+    jam:    '#d4395e',
+    jamLt:  '#f47ea0',
+    jamDk:  '#8d1c39',
+    accent: '#ff9fb6',
+    glow:   '#ff5e85',
+    bg:     '#fcefe5',
+    ink:    '#3d1722',
+    toast:  '#e8a04a',
+    toastDk:'#a55c1f'
+  },
+  blueberry: {
+    name: 'BLUEBERRY',
+    jam:    '#3e4fa3',
+    jamLt:  '#8d99d6',
+    jamDk:  '#1e2660',
+    accent: '#c0c8e8',
+    glow:   '#5d6fdf',
+    bg:     '#ebeef7',
+    ink:    '#0e1330',
+    toast:  '#d18642',
+    toastDk:'#8c4717'
+  },
+  raspberry: {
+    name: 'RASPBERRY',
+    jam:    '#9e2552',
+    jamLt:  '#cb5d86',
+    jamDk:  '#5a1432',
+    accent: '#e496b5',
+    glow:   '#c93b73',
+    bg:     '#f5e6e9',
+    ink:    '#2a0e1a',
+    toast:  '#d99a4f',
+    toastDk:'#985221'
+  }
+};
+
+// ----- Persistent registry (localStorage) -----
+const REG = {
+  load() { try { return JSON.parse(localStorage.getItem('jamjar_registry')||'{}'); } catch(e){ return {}; } },
+  save(o) { try { localStorage.setItem('jamjar_registry', JSON.stringify(o)); } catch(e){} }
+};
+let registry = REG.load();
+let currentFlavorKey = (registry.flavor && FLAVORS[registry.flavor]) ? registry.flavor : 'strawberry';
+let PAL = FLAVORS[currentFlavorKey];
+
+// ----- Gameplay constants -----
+const CFG = {
+  chargeTime: 6500,           // ms to full charge (automatic)
+  minRadius: 120,
+  maxRadius: 520,
+  spawnStart: 950,            // ms between spawns at start
+  spawnMin: 240,              // ms between spawns at peak
+  spawnRamp: 75 * 1000,       // ms to reach peak spawn rate
+  toastSpeedStart: 70,        // px/s
+  toastSpeedMax: 175,
+  speedRamp: 75 * 1000,
+  bossKills: 50,              // cumulative kills to spawn boss
+  killHeal: 20,               // kills in one blast to heal +2 HP
+  playerMaxHp: 3,
+  playerSpeed: 280,
+  invulnTime: 1100,           // ms i-frames
+  playerRadius: 26,
+  toastRadius: 22,
+  bossHp: 90,
+  blastCooldown: 1200         // ms minimum delay between blasts (anti-spam)
+};
+
+// ----- Funny kill phrases -----
+const KILL_PHRASES = [
+  'TOASTED!', 'JAMMED!', 'BURNT!', 'CRUSTY!', 'STALE!',
+  'CRUMBS!', 'SPLAT!', 'CRISPY!', 'BUTTERED!', 'CRUMBLED!',
+  'BAKED!', 'TOASTY!', 'GOLDEN!', 'CRUNCH!', 'YUM!',
+  'BREADED!', 'POOF!', 'KABLAM!', 'NOM!', 'SQUISH!',
+  'WELL DONE!', 'BURNT TO A CRISP!', 'NICE TOAST'
+];
+
+// ----- Audio -----
+const AUDIO = {
+  bgm: null,
+  sfxBlast: null,
+  muted: false,
+  init() {
+    try {
+      this.muted = !!(registry.muted);
+      this.bgm = new Audio('techno-bgm.mp3');
+      this.bgm.loop = true;
+      this.bgm.volume = 0.45;
+      this.bgm.muted = this.muted;
+      this.sfxBlast = new Audio('jam-explosion.mp3');
+      this.sfxBlast.volume = 0.75;
+      this.sfxBlast.muted = this.muted;
+      this.bgm.load();
+      this.sfxBlast.load();
+    } catch(e) { console.warn('Audio init failed:', e); }
+  },
+  startBgm() {
+    if (!this.bgm) return;
+    try {
+      this.bgm.currentTime = 0;
+      const p = this.bgm.play();
+      if (p && p.catch) p.catch(err => console.warn('BGM play blocked:', err));
+    } catch(e) {}
+  },
+  resumeBgm() {
+    if (!this.bgm) return;
+    try { const p = this.bgm.play(); if (p && p.catch) p.catch(()=>{}); } catch(e) {}
+  },
+  pauseBgm() {
+    if (!this.bgm) return;
+    try { this.bgm.pause(); } catch(e) {}
+  },
+  stopBgm() {
+    if (!this.bgm) return;
+    try { this.bgm.pause(); this.bgm.currentTime = 0; } catch(e) {}
+  },
+  blast() {
+    if (!this.sfxBlast || this.muted) return;
+    try {
+      const s = this.sfxBlast.cloneNode();
+      s.volume = this.sfxBlast.volume;
+      const p = s.play();
+      if (p && p.catch) p.catch(()=>{});
+    } catch(e) {}
+  }
+};
+AUDIO.init();
+
+// ----- States -----
+const STATE = { MENU:'menu', PLAYING:'playing', BOSS:'boss', END:'end' };
+let state = STATE.MENU;
+
+// ----- Runtime vars -----
+let lastT = 0;
+let elapsed = 0;
+let bossSpawned = false;
+let spawnTimer = 0;
+let toasts = [];
+let particles = [];
+let explosions = [];
+let floatTexts = [];
+let player, boss = null;
+let kills = 0;
+let score = 0;
+let wavesPopped = 0;
+let bestWave = 0;
+let paused = false;
+let endStats = null;
+let screenShake = 0;
+
+// ----- Utils -----
+const rnd  = (a, b) => a + Math.random() * (b - a);
+const rndi = (a, b) => Math.floor(rnd(a, b));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const dist2 = (ax, ay, bx, by) => { const dx=ax-bx, dy=ay-by; return dx*dx+dy*dy; };
+const lerp = (a,b,t)=>a+(b-a)*t;
+
+function setRoot() {
+  document.documentElement.style.setProperty('--ink', PAL.ink);
+  document.documentElement.style.setProperty('--jam', PAL.jam);
+  document.body.style.background = PAL.bg;
+  cvs.style.background = PAL.bg;
+}
+setRoot();
+
+// =============================================================
+// Watercolor / doodle drawing helpers
+// =============================================================
+function watercolorBlob(x, y, r, color, alpha=0.18, layers=3) {
+  for (let i=0;i<layers;i++){
+    ctx.save();
+    ctx.globalAlpha = alpha * (1 - i*0.18);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    const seg = 14;
+    const baseR = r * (1 + i*0.18);
+    for (let k=0;k<=seg;k++){
+      const a = (k/seg)*Math.PI*2;
+      const wob = (Math.sin(a*3 + i*1.7) + Math.cos(a*5 + i*0.9)) * 0.08 + 1;
+      const rr = baseR * wob;
+      const px = x + Math.cos(a)*rr;
+      const py = y + Math.sin(a)*rr;
+      if (k===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function inkStroke(path, color=PAL.ink, width=2.4, alpha=0.85) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  path();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function paperTexture() {
+  if (!paperTexture.cache || paperTexture.cacheKey !== currentFlavorKey) {
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const cx = c.getContext('2d');
+    for (let i=0;i<60;i++){
+      cx.globalAlpha = rnd(0.02, 0.06);
+      cx.fillStyle = PAL.accent;
+      const r = rnd(40, 180);
+      cx.beginPath();
+      cx.arc(rnd(0,W), rnd(0,H), r, 0, Math.PI*2);
+      cx.fill();
+    }
+    paperTexture.cache = c;
+    paperTexture.cacheKey = currentFlavorKey;
+  }
+  ctx.drawImage(paperTexture.cache, 0, 0);
+}
+
+// =============================================================
+// PLAYER (Jam jar)
+// =============================================================
+function makePlayer() {
+  return {
+    x: W/2, y: H/2,
+    vx: 0, vy: 0,
+    hp: CFG.playerMaxHp,
+    charge: 0,           // 0..1, fills automatically
+    invuln: 0,
+    cooldown: 0,         // ms remaining before next blast is allowed
+    radius: CFG.playerRadius
+  };
+}
+
+function drawPlayer(p) {
+  const fullCharge = p.charge >= 0.985;
+  const now = performance.now();
+
+  // ✨ SHINY AURA at full charge — drawn behind the jar, in world space
+  if (fullCharge) {
+    ctx.save();
+    // Outer golden halo
+    const haloR = 70 + Math.sin(now/180) * 8;
+    const grad = ctx.createRadialGradient(p.x, p.y, 10, p.x, p.y, haloR);
+    grad.addColorStop(0, 'rgba(255,220,90,0.55)');
+    grad.addColorStop(0.55, 'rgba(255,180,40,0.25)');
+    grad.addColorStop(1, 'rgba(255,180,40,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, haloR, 0, Math.PI*2);
+    ctx.fill();
+
+    // Rotating sparkle rays
+    ctx.translate(p.x, p.y);
+    ctx.rotate(now / 700);
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = '#fff5b0';
+    for (let i = 0; i < 8; i++) {
+      ctx.rotate(Math.PI*2/8);
+      const len = 28 + Math.sin(now/150 + i)*4;
+      ctx.beginPath();
+      ctx.moveTo(0, -50);
+      ctx.lineTo(3, -50 - len);
+      ctx.lineTo(0, -56 - len);
+      ctx.lineTo(-3, -50 - len);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Sparkles spawned around the jar
+    if (Math.random() < 0.55) {
+      const ang = rnd(0, Math.PI*2);
+      const rr = rnd(30, 55);
+      particles.push({
+        x: p.x + Math.cos(ang)*rr,
+        y: p.y + Math.sin(ang)*rr,
+        vx: rnd(-30, 30),
+        vy: rnd(-60, -20),
+        g: 60,
+        life: rnd(0.4, 0.8),
+        max: 0.8,
+        size: rnd(2, 4),
+        rot: rnd(0, Math.PI*2),
+        rotV: rnd(-3, 3),
+        col: Math.random() < 0.6 ? '#fff5b0' : '#ffd400'
+      });
+    }
+  }
+
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  const tilt = clamp((p.vx)/CFG.playerSpeed, -1, 1) * 0.18;
+  ctx.rotate(tilt);
+  const pulse = 1 + Math.sin(now/120) * 0.04 * p.charge + (fullCharge ? 0.06 + Math.sin(now/100)*0.04 : 0);
+  ctx.scale(pulse, pulse);
+
+  const flicker = p.invuln > 0 && (Math.floor(now/80) % 2 === 0);
+  if (flicker) ctx.globalAlpha = 0.4;
+
+  // Jar body (rounded rectangle)
+  const w = 50, h = 56;
+  ctx.fillStyle = PAL.jamLt;
+  ctx.beginPath();
+  ctx.moveTo(-w/2+6, -h/2);
+  ctx.lineTo(w/2-6, -h/2);
+  ctx.quadraticCurveTo(w/2, -h/2, w/2, -h/2+8);
+  ctx.lineTo(w/2, h/2-8);
+  ctx.quadraticCurveTo(w/2, h/2, w/2-6, h/2);
+  ctx.lineTo(-w/2+6, h/2);
+  ctx.quadraticCurveTo(-w/2, h/2, -w/2, h/2-8);
+  ctx.lineTo(-w/2, -h/2+8);
+  ctx.quadraticCurveTo(-w/2, -h/2, -w/2+6, -h/2);
+  ctx.closePath();
+  ctx.fill();
+
+  // Jam level (fills as charge rises)
+  const jamLvl = 0.35 + p.charge * 0.55;
+  const jamTop = h/2 - h * jamLvl;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-w/2+2, jamTop, w-4, h/2 - jamTop + h/2 - 2);
+  ctx.clip();
+  ctx.fillStyle = PAL.jam;
+  ctx.fillRect(-w/2, -h/2, w, h);
+  // surface wave
+  ctx.fillStyle = PAL.jamLt;
+  ctx.globalAlpha = 0.7;
+  ctx.beginPath();
+  const ph = performance.now()/300;
+  ctx.moveTo(-w/2, jamTop);
+  for (let x=-w/2; x<=w/2; x+=4) {
+    ctx.lineTo(x, jamTop + Math.sin(x*0.18 + ph)*1.6);
+  }
+  ctx.lineTo(w/2, jamTop+10);
+  ctx.lineTo(-w/2, jamTop+10);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // Lid
+  ctx.fillStyle = PAL.jamDk;
+  ctx.beginPath();
+  ctx.roundRect ? ctx.roundRect(-w/2-4, -h/2-10, w+8, 12, 4) :
+    ctx.rect(-w/2-4, -h/2-10, w+8, 12);
+  ctx.fill();
+
+  // Jar ink outline (bright gold + thick when shiny)
+  inkStroke(()=>{
+    ctx.beginPath();
+    ctx.moveTo(-w/2+6, -h/2);
+    ctx.lineTo(w/2-6, -h/2);
+    ctx.quadraticCurveTo(w/2, -h/2, w/2, -h/2+8);
+    ctx.lineTo(w/2, h/2-8);
+    ctx.quadraticCurveTo(w/2, h/2, w/2-6, h/2);
+    ctx.lineTo(-w/2+6, h/2);
+    ctx.quadraticCurveTo(-w/2, h/2, -w/2, h/2-8);
+    ctx.lineTo(-w/2, -h/2+8);
+    ctx.quadraticCurveTo(-w/2, -h/2, -w/2+6, -h/2);
+    ctx.closePath();
+  }, fullCharge ? '#ffd400' : PAL.ink, fullCharge ? 4 : 2.4, fullCharge ? 1 : 0.85);
+
+  // Glassy highlight stripe on the jar when shiny
+  if (fullCharge) {
+    ctx.save();
+    ctx.globalAlpha = 0.55 + 0.2*Math.sin(now/150);
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(-w/2+8, 0, 3, h/2 - 6, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Cute little eyes
+  ctx.fillStyle = PAL.ink;
+  ctx.beginPath();
+  ctx.arc(-7, 8, 2.6, 0, Math.PI*2);
+  ctx.arc(7, 8, 2.6, 0, Math.PI*2);
+  ctx.fill();
+  // little smile
+  ctx.strokeStyle = PAL.ink;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(0, 16, 4, 0.1*Math.PI, 0.9*Math.PI);
+  ctx.stroke();
+
+  ctx.restore();
+
+  // Blast radius preview (always visible, scales with current charge)
+  if (p.charge > 0.02) {
+    const r = lerp(CFG.minRadius, CFG.maxRadius, p.charge);
+    ctx.save();
+    ctx.globalAlpha = fullCharge
+      ? 0.4 + 0.3*Math.sin(now/100)
+      : 0.18 + 0.12*Math.sin(now/180);
+    ctx.strokeStyle = fullCharge ? '#ffd400' : PAL.glow;
+    ctx.lineWidth = fullCharge ? 6 : 3;
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// =============================================================
+// TOASTS (enemies)
+// =============================================================
+function spawnToast(opts = {}) {
+  const edge = rndi(0,4);
+  let x, y;
+  const margin = 40;
+  if (edge===0){ x = -margin; y = rnd(0, H); }
+  else if (edge===1){ x = W+margin; y = rnd(0, H); }
+  else if (edge===2){ x = rnd(0, W); y = -margin; }
+  else { x = rnd(0, W); y = H+margin; }
+
+  toasts.push({
+    x, y,
+    rot: rnd(0, Math.PI*2),
+    rotV: rnd(-1.5, 1.5),
+    speed: opts.speed || currentToastSpeed(),
+    radius: CFG.toastRadius,
+    hp: 1,
+    wobble: rnd(0, Math.PI*2)
+  });
+}
+
+function currentToastSpeed() {
+  const t = clamp(elapsed / CFG.speedRamp, 0, 1);
+  return lerp(CFG.toastSpeedStart, CFG.toastSpeedMax, t);
+}
+
+function currentSpawnInterval() {
+  const t = clamp(elapsed / CFG.spawnRamp, 0, 1);
+  return lerp(CFG.spawnStart, CFG.spawnMin, t);
+}
+
+function drawToast(t) {
+  ctx.save();
+  ctx.translate(t.x, t.y);
+  ctx.rotate(t.rot);
+
+  const w = 42, h = 46;
+  watercolorBlob(2, 4, 22, PAL.toastDk, 0.18, 1);
+
+  // Toast slice
+  ctx.fillStyle = PAL.toast;
+  ctx.beginPath();
+  ctx.moveTo(-w/2+8, -h/2);
+  ctx.quadraticCurveTo(0, -h/2-6, w/2-8, -h/2);
+  ctx.quadraticCurveTo(w/2+4, -h/4, w/2, h/2-6);
+  ctx.quadraticCurveTo(w/2-6, h/2+4, 0, h/2);
+  ctx.quadraticCurveTo(-w/2+6, h/2+2, -w/2, h/2-8);
+  ctx.quadraticCurveTo(-w/2-3, -h/4, -w/2+8, -h/2);
+  ctx.closePath();
+  ctx.fill();
+
+  // Crust
+  inkStroke(()=>{
+    ctx.beginPath();
+    ctx.moveTo(-w/2+8, -h/2);
+    ctx.quadraticCurveTo(0, -h/2-6, w/2-8, -h/2);
+    ctx.quadraticCurveTo(w/2+4, -h/4, w/2, h/2-6);
+    ctx.quadraticCurveTo(w/2-6, h/2+4, 0, h/2);
+    ctx.quadraticCurveTo(-w/2+6, h/2+2, -w/2, h/2-8);
+    ctx.quadraticCurveTo(-w/2-3, -h/4, -w/2+8, -h/2);
+    ctx.closePath();
+  }, PAL.toastDk, 2.2);
+
+  // Jam topping (matching the player's flavor, ironic)
+  ctx.fillStyle = PAL.jam;
+  ctx.beginPath();
+  ctx.moveTo(-w/2+10, -h/2+6);
+  ctx.quadraticCurveTo(0, -h/2-2, w/2-10, -h/2+6);
+  ctx.quadraticCurveTo(w/2-4, 0, w/2-8, h/2-10);
+  ctx.quadraticCurveTo(0, h/2-2, -w/2+8, h/2-10);
+  ctx.quadraticCurveTo(-w/2+4, 0, -w/2+10, -h/2+6);
+  ctx.closePath();
+  ctx.fill();
+
+  // Hungry eyes
+  ctx.fillStyle = PAL.ink;
+  ctx.beginPath();
+  ctx.arc(-6, 2, 2, 0, Math.PI*2);
+  ctx.arc(6, 2, 2, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = PAL.ink;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(0, 12, 4, 0, Math.PI);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function updateToasts(dt) {
+  for (const t of toasts) {
+    const dx = player.x - t.x, dy = player.y - t.y;
+    const d = Math.hypot(dx, dy) || 1;
+    t.x += (dx/d) * t.speed * dt;
+    t.y += (dy/d) * t.speed * dt;
+    t.rot += t.rotV * dt;
+    t.wobble += dt * 6;
+  }
+}
+
+// =============================================================
+// EXPLOSIONS
+// =============================================================
+function triggerExplosion(p) {
+  if (p.cooldown > 0) return;
+  const charge = p.charge;
+  if (charge < 0.05) return;
+
+  let radius = lerp(CFG.minRadius, CFG.maxRadius, charge);
+  const fullCharge = charge >= 0.985;
+  if (fullCharge) radius = Math.hypot(W, H);
+
+  // POWER scales with charge — 0.05 charge -> 0.6x, full charge -> 2.2x
+  const power = 0.6 + charge * 1.6;
+  // Particles per kill scale with charge (8 -> 20)
+  const particlesPerKill = Math.round(8 + charge * 12);
+
+  // Kills
+  let killed = 0;
+  const next = [];
+  const killedPositions = [];
+  for (const t of toasts) {
+    if (dist2(t.x, t.y, p.x, p.y) <= radius*radius) {
+      killed++;
+      killedPositions.push({ x: t.x, y: t.y });
+      for (let i=0;i<particlesPerKill;i++) particles.push(makeParticle(t.x, t.y, PAL.toast, PAL.toastDk));
+    } else {
+      next.push(t);
+    }
+  }
+  toasts = next;
+
+  // Knockback : push surviving toasts outward, strength scales with charge
+  if (charge > 0.2) {
+    for (const t of toasts) {
+      const dx = t.x - p.x, dy = t.y - p.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const reach = radius * 1.6;
+      if (d < reach) {
+        const force = (1 - d / reach) * 200 * charge;
+        t.x += (dx / d) * force * 0.04;
+        t.y += (dy / d) * force * 0.04;
+      }
+    }
+  }
+
+  // Boss damage scales hard with charge : 3 -> 21
+  if (boss && dist2(boss.x, boss.y, p.x, p.y) <= (radius + boss.radius)*(radius + boss.radius)) {
+    const dmg = Math.round(3 + charge * 18);
+    boss.hp -= dmg;
+    boss.flash = 0.5;
+    for (let i=0;i<24;i++) particles.push(makeParticle(boss.x, boss.y, PAL.toast, PAL.toastDk));
+    floatTexts.push({
+      x: boss.x, y: boss.y + 90, text: `-${dmg}`,
+      color: '#ffeb3b', life: 1, max: 1, size: 36, shake: true
+    });
+  }
+
+  const tier = comboTier(killed);
+  // Scoring: 100×n + 60×n² × power multiplier
+  const gained = Math.round((100*killed + 60*killed*killed) * power);
+  if (killed > 0) {
+    score += gained;
+    wavesPopped++;
+    bestWave = Math.max(bestWave, killed);
+    if (killed >= CFG.killHeal) {
+      p.hp = CFG.playerMaxHp;
+      floatTexts.push({ x: p.x, y: p.y - 90, text: 'JAR FULLY REPAIRED!', color: PAL.jam, life: 1.8, max: 1.8, size: 42, shake: true });
+    }
+    floatTexts.push({
+      x: p.x, y: p.y - 50,
+      text: `${tier.label}  x${killed}  +${gained}`,
+      color: tier.color, life: 1.6, max: 1.6, size: tier.size, shake: tier.size >= 60
+    });
+
+    // Funny phrases at random killed toast positions
+    const phraseCount = Math.min(3, Math.max(1, Math.ceil(killed / 5)));
+    const shuffled = killedPositions.slice().sort(() => Math.random() - 0.5);
+    for (let i = 0; i < phraseCount && i < shuffled.length; i++) {
+      const pos = shuffled[i];
+      const phrase = KILL_PHRASES[Math.floor(Math.random() * KILL_PHRASES.length)];
+      floatTexts.push({
+        x: pos.x + rnd(-15, 15),
+        y: pos.y + rnd(-10, 10),
+        text: phrase,
+        color: PAL.glow,
+        life: 1.1, max: 1.1,
+        size: 26 + Math.floor(rnd(0, 8)),
+        shake: false,
+        funny: true
+      });
+    }
+  } else if (charge > 0.3) {
+    floatTexts.push({ x: p.x, y: p.y - 30, text: 'whiff…', color: PAL.ink, life: 1, max: 1, size: 24 });
+  }
+
+  // Visual shockwave
+  explosions.push({
+    x: p.x, y: p.y, r: 10, maxR: radius,
+    life: fullCharge ? 1.0 : 0.6, max: fullCharge ? 1.0 : 0.6,
+    full: fullCharge
+  });
+
+  // Screen shake scales with charge & kills
+  screenShake = Math.max(screenShake, fullCharge ? 28 : 8 + killed * 0.6 + charge * 12);
+
+  // Play blast SFX
+  AUDIO.blast();
+
+  kills += killed;
+  p.charge = 0;
+  p.cooldown = CFG.blastCooldown;
+}
+
+function comboTier(n) {
+  if (n >= 25) return { label: 'GODLIKE!!', color: '#ffba00', size: 84 };
+  if (n >= 15) return { label: 'MEGA!!',    color: '#ff3a73', size: 72 };
+  if (n >= 10) return { label: 'ULTRA!',    color: PAL.glow,  size: 60 };
+  if (n >= 6)  return { label: 'BOOM!',     color: PAL.jam,   size: 52 };
+  if (n >= 3)  return { label: 'BANG',      color: PAL.jamDk, size: 44 };
+  return         { label: 'POP',       color: PAL.ink,   size: 36 };
+}
+
+function updateExplosions(dt) {
+  for (const e of explosions) {
+    e.life -= dt;
+    const k = 1 - (e.life / e.max);
+    e.r = lerp(10, e.maxR, Math.min(1, k*1.2));
+  }
+  explosions = explosions.filter(e => e.life > 0);
+}
+
+function drawExplosions() {
+  for (const e of explosions) {
+    const a = clamp(e.life / e.max, 0, 1);
+    ctx.save();
+    const grad = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.r);
+    grad.addColorStop(0, hexA(PAL.glow, 0.75 * a));
+    grad.addColorStop(0.6, hexA(PAL.jam, 0.28 * a));
+    grad.addColorStop(1, hexA(PAL.jam, 0));
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.r, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 0.7 * a;
+    ctx.strokeStyle = PAL.glow;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.r, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function hexA(hex, a) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// =============================================================
+// PARTICLES
+// =============================================================
+function makeParticle(x, y, colA, colB) {
+  return {
+    x, y,
+    vx: rnd(-200, 200),
+    vy: rnd(-220, 80),
+    g: 380,
+    life: rnd(0.6, 1.2),
+    max: 1.2,
+    size: rnd(3, 6),
+    rot: rnd(0, Math.PI*2),
+    rotV: rnd(-6, 6),
+    col: Math.random() < 0.5 ? colA : colB
+  };
+}
+
+function updateParticles(dt) {
+  for (const p of particles) {
+    p.life -= dt;
+    p.vy += p.g * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.rot += p.rotV * dt;
+  }
+  particles = particles.filter(p => p.life > 0);
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.save();
+    ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
+    ctx.fillStyle = p.col;
+    ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
+    ctx.restore();
+  }
+}
+
+// =============================================================
+// FLOATING TEXTS (arcade style)
+// =============================================================
+function updateFloatTexts(dt) {
+  for (const f of floatTexts) {
+    f.life -= dt;
+    f.y -= 50 * dt;
+  }
+  floatTexts = floatTexts.filter(f => f.life > 0);
+}
+function drawFloatTexts() {
+  for (const f of floatTexts) {
+    const a = clamp(f.life / f.max, 0, 1);
+    // pop-in scale
+    const k = 1 - (f.life / f.max);
+    const scale = k < 0.15 ? 0.6 + (k/0.15)*0.55 : 1.15 - Math.min(1, (k-0.15)/0.85)*0.15;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.translate(f.x, f.y);
+    if (f.shake) {
+      ctx.rotate(Math.sin(performance.now()/40) * 0.05);
+    } else if (f.funny) {
+      if (f.tilt === undefined) f.tilt = rnd(-0.2, 0.2);
+      ctx.rotate(f.tilt);
+    }
+    ctx.scale(scale, scale);
+    ctx.font = `700 ${f.size}px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(6, f.size * 0.18);
+    ctx.strokeStyle = PAL.ink;
+    ctx.strokeText(f.text, 0, 0);
+    // shadow color fill for chunkiness
+    ctx.fillStyle = '#fff';
+    ctx.fillText(f.text, 0, 0);
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.fillStyle = f.color;
+    ctx.globalAlpha = a * 0.95;
+    ctx.fillText(f.text, 0, 0);
+    ctx.restore();
+  }
+}
+
+// =============================================================
+// BOSS: TOASTER TITAN
+// =============================================================
+function spawnBoss() {
+  boss = {
+    x: W/2, y: 130,
+    vx: 95, vy: 0,
+    hp: CFG.bossHp,
+    maxHp: CFG.bossHp,
+    radius: 80,
+    fireT: 0,
+    flash: 0,
+    aliveTime: 0   // ms since boss spawned — boosts firing over time
+  };
+  bossSpawned = true;
+  state = STATE.BOSS;
+  floatTexts.push({
+    x: W/2, y: H/2 - 80, text: 'TOASTER TITAN',
+    color: PAL.jamDk, life: 2.6, max: 2.6, size: 96, shake: true
+  });
+  floatTexts.push({
+    x: W/2, y: H/2 + 10, text: 'DESTROY IT!',
+    color: PAL.glow, life: 2.6, max: 2.6, size: 56, shake: true
+  });
+  screenShake = 25;
+}
+
+function updateBoss(dt) {
+  if (!boss) return;
+  boss.aliveTime += dt * 1000;
+  boss.x += boss.vx * dt;
+  if (boss.x < 130 || boss.x > W - 130) boss.vx *= -1;
+  boss.y = 130 + Math.sin(performance.now()/700) * 14;
+  if (boss.flash > 0) boss.flash -= dt;
+
+  boss.fireT -= dt;
+  if (boss.fireT <= 0) {
+    // Combined intensity : HP loss + time alive (each contributes)
+    const hpRatio = boss.hp / boss.maxHp;
+    const hpFactor = 1 - hpRatio;                                 // 0 → 1 as HP drops
+    const timeFactor = clamp(boss.aliveTime / 40000, 0, 1);       // 0 → 1 over 40s
+    const intensity = clamp(hpFactor * 0.55 + timeFactor * 0.65, 0, 1.2);
+
+    // Toasts per salvo grows : 1 → 6
+    const count = Math.min(6, 1 + Math.floor(intensity * 5));
+    // Speed grows : 140 → 260 px/s
+    const speed = lerp(140, 260, Math.min(1, intensity));
+    for (let i=0;i<count;i++){
+      const off = (i - (count-1)/2) * 36;
+      toasts.push({
+        x: boss.x + off,
+        y: boss.y + 60,
+        rot: 0, rotV: rnd(-2, 2),
+        speed: speed,
+        radius: CFG.toastRadius,
+        hp: 1,
+        wobble: 0
+      });
+    }
+    // Firing interval shrinks : 1.2s → 0.18s
+    boss.fireT = lerp(1.2, 0.18, Math.min(1, intensity));
+  }
+}
+
+function drawBoss() {
+  if (!boss) return;
+  ctx.save();
+  ctx.translate(boss.x, boss.y);
+
+  const bw = 210, bh = 140;
+  ctx.fillStyle = boss.flash > 0 ? '#fff' : '#cdb497';
+  ctx.beginPath();
+  ctx.moveTo(-bw/2+10, -bh/2);
+  ctx.lineTo(bw/2-10, -bh/2);
+  ctx.quadraticCurveTo(bw/2, -bh/2, bw/2, -bh/2+10);
+  ctx.lineTo(bw/2, bh/2-10);
+  ctx.quadraticCurveTo(bw/2, bh/2, bw/2-10, bh/2);
+  ctx.lineTo(-bw/2+10, bh/2);
+  ctx.quadraticCurveTo(-bw/2, bh/2, -bw/2, bh/2-10);
+  ctx.lineTo(-bw/2, -bh/2+10);
+  ctx.quadraticCurveTo(-bw/2, -bh/2, -bw/2+10, -bh/2);
+  ctx.closePath();
+  ctx.fill();
+
+  // Slots
+  ctx.fillStyle = PAL.ink;
+  ctx.fillRect(-75, -bh/2+18, 40, 20);
+  ctx.fillRect(-15, -bh/2+18, 40, 20);
+  ctx.fillRect(45, -bh/2+18, 40, 20);
+
+  // Heating glow
+  ctx.globalAlpha = 0.6 + 0.3*Math.sin(performance.now()/100);
+  ctx.fillStyle = PAL.glow;
+  ctx.fillRect(-75, -bh/2+22, 40, 5);
+  ctx.fillRect(-15, -bh/2+22, 40, 5);
+  ctx.fillRect(45, -bh/2+22, 40, 5);
+  ctx.globalAlpha = 1;
+
+  // Lever
+  ctx.fillStyle = PAL.jamDk;
+  ctx.fillRect(bw/2-6, -8, 16, 32);
+
+  // Angry eyes
+  ctx.fillStyle = PAL.ink;
+  ctx.beginPath();
+  ctx.moveTo(-52, 20);
+  ctx.lineTo(-26, 14);
+  ctx.lineTo(-26, 36);
+  ctx.lineTo(-52, 42);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(52, 20);
+  ctx.lineTo(26, 14);
+  ctx.lineTo(26, 36);
+  ctx.lineTo(52, 42);
+  ctx.closePath();
+  ctx.fill();
+
+  // Outline
+  inkStroke(()=>{
+    ctx.beginPath();
+    ctx.moveTo(-bw/2+10, -bh/2);
+    ctx.lineTo(bw/2-10, -bh/2);
+    ctx.quadraticCurveTo(bw/2, -bh/2, bw/2, -bh/2+10);
+    ctx.lineTo(bw/2, bh/2-10);
+    ctx.quadraticCurveTo(bw/2, bh/2, bw/2-10, bh/2);
+    ctx.lineTo(-bw/2+10, bh/2);
+    ctx.quadraticCurveTo(-bw/2, bh/2, -bw/2, bh/2-10);
+    ctx.lineTo(-bw/2, -bh/2+10);
+    ctx.quadraticCurveTo(-bw/2, -bh/2, -bw/2+10, -bh/2);
+    ctx.closePath();
+  }, PAL.ink, 3);
+
+  ctx.restore();
+
+  // Boss HP bar (big & loud)
+  const barW = 720, barH = 26;
+  const bx = (W - barW) / 2, by = 26;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,.15)';
+  ctx.fillRect(bx, by, barW, barH);
+  const hpRatio = boss.hp / boss.maxHp;
+  const cg = ctx.createLinearGradient(bx, 0, bx+barW, 0);
+  cg.addColorStop(0, PAL.jamDk);
+  cg.addColorStop(1, PAL.jam);
+  ctx.fillStyle = cg;
+  ctx.fillRect(bx, by, barW * hpRatio, barH);
+  inkStroke(()=>{ ctx.rect(bx, by, barW, barH); }, PAL.ink, 3);
+  ctx.font = "700 26px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = PAL.ink;
+  ctx.strokeText('TOASTER TITAN', W/2, by + 56);
+  ctx.fillStyle = '#fff';
+  ctx.fillText('TOASTER TITAN', W/2, by + 56);
+  ctx.restore();
+}
+
+// =============================================================
+// INPUT
+// =============================================================
+const keys = {};
+window.addEventListener('keydown', e => {
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+  const k = e.key.toLowerCase();
+  keys[k] = true;
+  if ((e.key === ' ' || e.code === 'Space') && !e.repeat) {
+    if ((state === STATE.PLAYING || state === STATE.BOSS) && player && !paused) {
+      triggerExplosion(player);
+    }
+  }
+  if (k === 'p') {
+    if (state === STATE.PLAYING || state === STATE.BOSS) {
+      paused = !paused;
+      if (paused) AUDIO.pauseBgm(); else AUDIO.resumeBgm();
+    }
+  }
+  if (k === 'm') {
+    AUDIO.muted = !AUDIO.muted;
+    if (AUDIO.bgm) AUDIO.bgm.muted = AUDIO.muted;
+    if (AUDIO.sfxBlast) AUDIO.sfxBlast.muted = AUDIO.muted;
+    registry = REG.load(); registry.muted = AUDIO.muted; REG.save(registry);
+  }
+});
+window.addEventListener('keyup', e => {
+  keys[e.key.toLowerCase()] = false;
+});
+
+// =============================================================
+// GAME LOOP
+// =============================================================
+function update(dt) {
+  if (state !== STATE.PLAYING && state !== STATE.BOSS) return;
+  if (paused) return;
+
+  elapsed += dt * 1000;
+
+  // Movement
+  let ax = 0, ay = 0;
+  if (keys['a'] || keys['arrowleft']) ax -= 1;
+  if (keys['d'] || keys['arrowright']) ax += 1;
+  if (keys['w'] || keys['arrowup']) ay -= 1;
+  if (keys['s'] || keys['arrowdown']) ay += 1;
+  const len = Math.hypot(ax, ay) || 1;
+  player.vx = (ax/len) * CFG.playerSpeed;
+  player.vy = (ay/len) * CFG.playerSpeed;
+  player.x += player.vx * dt;
+  player.y += player.vy * dt;
+  player.x = clamp(player.x, 36, W-36);
+  player.y = clamp(player.y, 50, H-50);
+
+  // Cooldown tick (blocks firing AND charge buildup briefly)
+  if (player.cooldown > 0) player.cooldown -= dt * 1000;
+
+  // Auto-charge (paused while on cooldown to avoid stacking charge during the lockout)
+  if (player.cooldown <= 0) {
+    player.charge = Math.min(1, player.charge + dt * (1000 / CFG.chargeTime));
+  }
+
+  // i-frames
+  if (player.invuln > 0) player.invuln -= dt * 1000;
+
+  // Spawn toasts (only during regular play, boss handles its own)
+  if (state === STATE.PLAYING) {
+    spawnTimer -= dt * 1000;
+    if (spawnTimer <= 0) {
+      spawnToast();
+      spawnTimer = currentSpawnInterval();
+    }
+  }
+
+  updateToasts(dt);
+  updateExplosions(dt);
+  updateParticles(dt);
+  updateFloatTexts(dt);
+  if (state === STATE.BOSS) updateBoss(dt);
+
+  // Player <-> Toast collisions
+  if (player.invuln <= 0) {
+    for (let i=toasts.length-1; i>=0; i--) {
+      const t = toasts[i];
+      const rr = (t.radius + player.radius*0.7);
+      if (dist2(t.x, t.y, player.x, player.y) <= rr*rr) {
+        player.hp--;
+        player.invuln = CFG.invulnTime;
+        toasts.splice(i,1);
+        for (let k=0;k<12;k++) particles.push(makeParticle(player.x, player.y, PAL.jam, PAL.jamDk));
+        floatTexts.push({ x: player.x, y: player.y - 50, text: '-1 HP', color: '#c0392b', life: 1.2, max: 1.2, size: 38, shake: true });
+        screenShake = Math.max(screenShake, 12);
+        if (player.hp <= 0) {
+          endGame(false);
+          return;
+        }
+        break;
+      }
+    }
+  }
+
+  // Player <-> Boss body contact damage
+  if (boss && player.invuln <= 0) {
+    const rr = boss.radius + player.radius * 0.85;
+    if (dist2(boss.x, boss.y, player.x, player.y) <= rr*rr) {
+      player.hp--;
+      player.invuln = CFG.invulnTime;
+      // Knockback the player away from the boss
+      const dx = player.x - boss.x, dy = player.y - boss.y;
+      const d = Math.hypot(dx, dy) || 1;
+      player.x += (dx/d) * 60;
+      player.y += (dy/d) * 60;
+      player.x = clamp(player.x, 36, W-36);
+      player.y = clamp(player.y, 50, H-50);
+      for (let k=0;k<18;k++) particles.push(makeParticle(player.x, player.y, PAL.jam, PAL.jamDk));
+      floatTexts.push({ x: player.x, y: player.y - 60, text: 'TITAN SMASH! -1 HP', color: '#c0392b', life: 1.4, max: 1.4, size: 32, shake: true });
+      screenShake = Math.max(screenShake, 22);
+      if (player.hp <= 0) {
+        endGame(false);
+        return;
+      }
+    }
+  }
+
+  // Trigger boss
+  if (!bossSpawned && state === STATE.PLAYING && kills >= CFG.bossKills) {
+    spawnBoss();
+  }
+
+  // Boss kill = victory
+  if (state === STATE.BOSS && boss && boss.hp <= 0) {
+    score += 5000;
+    floatTexts.push({ x: W/2, y: H/2, text: 'TITAN CRUSHED  +5000', color: PAL.glow, life: 2.5, max: 2.5, size: 78, shake: true });
+    boss = null;
+    screenShake = 30;
+    endGame(true);
+    return;
+  }
+
+  // decay shake
+  if (screenShake > 0) screenShake = Math.max(0, screenShake - dt * 60);
+}
+
+function render() {
+  ctx.save();
+  // screen shake offset
+  if (screenShake > 0) {
+    ctx.translate(rnd(-screenShake, screenShake)*0.3, rnd(-screenShake, screenShake)*0.3);
+  }
+
+  // Background
+  ctx.fillStyle = PAL.bg;
+  ctx.fillRect(-50, -50, W+100, H+100);
+  paperTexture();
+
+  if (state === STATE.MENU) { ctx.restore(); return; }
+
+  // Vignette
+  const vg = ctx.createRadialGradient(W/2, H/2, H*0.3, W/2, H/2, H*0.85);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.15)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0,0,W,H);
+
+  drawExplosions();
+  for (const t of toasts) drawToast(t);
+  if (state === STATE.BOSS) drawBoss();
+  drawParticles();
+  if (player) drawPlayer(player);
+  drawFloatTexts();
+  drawLowHpWarning();
+  drawHUD();
+
+  ctx.restore();
+
+  if (paused) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(245,236,220,0.7)';
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = PAL.ink;
+    ctx.font = "700 100px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = '#fff';
+    ctx.strokeText('PAUSED', W/2, H/2);
+    ctx.fillText('PAUSED', W/2, H/2);
+    ctx.font = "24px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    ctx.fillText('PRESS P TO RESUME', W/2, H/2 + 50);
+    ctx.restore();
+  }
+}
+
+function drawLowHpWarning() {
+  if (!player || player.hp > 1 || player.hp <= 0) return;
+  const pulse = 0.18 + 0.22 * Math.abs(Math.sin(performance.now() / 280));
+  const g = ctx.createRadialGradient(W/2, H/2, H*0.25, W/2, H/2, H*0.7);
+  g.addColorStop(0, 'rgba(200,30,55,0)');
+  g.addColorStop(1, `rgba(200,30,55,${pulse})`);
+  ctx.save();
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+function drawHUD() {
+  ctx.save();
+  // Score (big arcade-style)
+  ctx.font = "700 40px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+  ctx.textAlign = 'left';
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = PAL.ink;
+  ctx.strokeText('SCORE  ' + score, 24, 50);
+  ctx.fillStyle = '#fff';
+  ctx.fillText('SCORE  ' + score, 24, 50);
+
+  ctx.font = "600 20px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = PAL.ink;
+  ctx.strokeText('KILLS  ' + kills, 24, 82);
+  ctx.fillStyle = PAL.jam;
+  ctx.fillText('KILLS  ' + kills, 24, 82);
+
+  // Muted indicator (top-right, above HP)
+  if (AUDIO.muted) {
+    ctx.textAlign = 'right';
+    ctx.font = "600 14px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = PAL.ink;
+    ctx.strokeText('🔇 MUTED (M)', W - 30, 22);
+    ctx.fillStyle = '#fff';
+    ctx.fillText('🔇 MUTED (M)', W - 30, 22);
+  }
+
+  // HP (mini jars)
+  const hx = W - 30, hy = 36;
+  ctx.textAlign = 'right';
+  ctx.font = "700 24px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = PAL.ink;
+  ctx.strokeText('HP', hx - CFG.playerMaxHp*42 - 14, hy + 22);
+  ctx.fillStyle = '#fff';
+  ctx.fillText('HP', hx - CFG.playerMaxHp*42 - 14, hy + 22);
+  for (let i = 0; i < CFG.playerMaxHp; i++) {
+    const x = hx - i*42 - 18;
+    const filled = i < player.hp;
+    ctx.save();
+    ctx.translate(x, hy + 14);
+    ctx.globalAlpha = filled ? 1 : 0.2;
+    ctx.fillStyle = PAL.jam;
+    ctx.fillRect(-14, -14, 28, 28);
+    ctx.fillStyle = PAL.jamDk;
+    ctx.fillRect(-16, -20, 32, 8);
+    ctx.restore();
+  }
+
+  // Charge bar (chunky) — lifted up so the in-blast counter fits underneath
+  const cw = 560, ch = 30;
+  const cxp = (W - cw)/2, cyp = H - 96;
+  const onCd = player.cooldown > 0;
+  // backdrop
+  ctx.fillStyle = onCd ? 'rgba(0,0,0,.22)' : 'rgba(0,0,0,.12)';
+  ctx.fillRect(cxp, cyp, cw, ch);
+  // segments
+  const segs = 5;
+  for (let i=1;i<segs;i++){
+    ctx.fillStyle = 'rgba(0,0,0,.2)';
+    ctx.fillRect(cxp + (cw/segs)*i - 1, cyp, 2, ch);
+  }
+  // fill
+  const fill = player.charge * cw;
+  const cg = ctx.createLinearGradient(cxp, 0, cxp+cw, 0);
+  cg.addColorStop(0, PAL.jam);
+  cg.addColorStop(1, PAL.glow);
+  ctx.fillStyle = cg;
+  ctx.fillRect(cxp, cyp, fill, ch);
+  if (player.charge >= 0.985) {
+    ctx.globalAlpha = 0.4 + 0.3*Math.sin(performance.now()/100);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(cxp, cyp, cw, ch);
+    ctx.globalAlpha = 1;
+  }
+  // Cooldown overlay : dim the bar + progress wipe from right
+  if (onCd) {
+    const cdProg = clamp(1 - player.cooldown / CFG.blastCooldown, 0, 1);
+    ctx.fillStyle = 'rgba(20,20,20,0.45)';
+    ctx.fillRect(cxp, cyp, cw, ch);
+    // recharging wipe
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(cxp, cyp, cw * cdProg, ch);
+  }
+  inkStroke(()=>{ ctx.rect(cxp, cyp, cw, ch); }, PAL.ink, 3);
+
+  // Full-charge prompt OR cooldown indicator above the bar
+  const fullCharge = player.charge >= 0.985;
+  if (onCd) {
+    ctx.textAlign = 'center';
+    ctx.font = "700 20px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = PAL.ink;
+    ctx.strokeText('RECHARGING…', W/2, cyp - 10);
+    ctx.fillStyle = '#bcd2ff';
+    ctx.fillText('RECHARGING…', W/2, cyp - 10);
+  } else if (fullCharge) {
+    ctx.textAlign = 'center';
+    ctx.font = "700 22px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = PAL.ink;
+    ctx.strokeText('FULL CHARGE', W/2, cyp - 10);
+    ctx.fillStyle = '#ffba00';
+    ctx.fillText('FULL CHARGE', W/2, cyp - 10);
+  }
+
+  // Toasts-in-blast counter — below the bar
+  const rawR = fullCharge ? Math.hypot(W,H) : lerp(CFG.minRadius, CFG.maxRadius, player.charge);
+  let inRange = 0;
+  const rSq = rawR * rawR;
+  for (const t of toasts) {
+    if (dist2(t.x, t.y, player.x, player.y) <= rSq) inRange++;
+  }
+  ctx.textAlign = 'center';
+  ctx.font = "700 22px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = PAL.ink;
+  const tLabel = `${inRange} IN BLAST`;
+  const counterY = cyp + ch + 26;
+  ctx.strokeText(tLabel, W/2, counterY);
+  let counterColor;
+  if (inRange >= CFG.killHeal) counterColor = '#ffd400';
+  else if (inRange >= 10) counterColor = PAL.glow;
+  else if (inRange >= 3) counterColor = '#fff';
+  else counterColor = inRange === 0 ? 'rgba(255,255,255,.55)' : '#fff';
+  ctx.fillStyle = counterColor;
+  ctx.fillText(tLabel, W/2, counterY);
+
+  // Heal-threshold hint (below counter, still on screen)
+  if (inRange >= CFG.killHeal) {
+    ctx.font = "700 14px system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = PAL.ink;
+    const heal = 'FULL HEAL READY!';
+    ctx.strokeText(heal, W/2, counterY + 18);
+    ctx.fillStyle = '#ffd400';
+    ctx.fillText(heal, W/2, counterY + 18);
+  }
+
+  ctx.restore();
+}
+
+function loop(t) {
+  const dt = Math.min(0.05, (t - lastT) / 1000 || 0);
+  lastT = t;
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+// =============================================================
+// GAME FLOW
+// =============================================================
+function startGame() {
+  document.getElementById('menu').classList.add('hidden');
+  document.getElementById('endScreen').classList.add('hidden');
+  toasts = []; particles = []; explosions = []; floatTexts = [];
+  player = makePlayer();
+  boss = null;
+  bossSpawned = false;
+  elapsed = 0;
+  spawnTimer = 0;
+  kills = 0;
+  score = 0;
+  wavesPopped = 0;
+  bestWave = 0;
+  paused = false;
+  screenShake = 0;
+  state = STATE.PLAYING;
+  AUDIO.startBgm();
+}
+
+function endGame(won) {
+  state = STATE.END;
+  AUDIO.stopBgm();
+  endStats = {
+    won,
+    score,
+    kills,
+    wavesPopped,
+    bestWave,
+    time: (elapsed/1000).toFixed(1)
+  };
+
+  registry = REG.load();
+  if (!registry.bestScore || score > registry.bestScore) registry.bestScore = score;
+  REG.save(registry);
+
+  const endTitle = document.getElementById('endTitle');
+  const endSub = document.getElementById('endSub');
+  const endStatsEl = document.getElementById('endStats');
+  if (won) {
+    endTitle.textContent = 'VICTORY!';
+    endTitle.style.color = PAL.glow;
+    endSub.textContent = 'You crushed the Toaster Titan.';
+  } else {
+    endTitle.textContent = 'GAME OVER';
+    endTitle.style.color = PAL.jamDk;
+    endSub.textContent = 'The jar is shattered…';
+  }
+  endStatsEl.innerHTML = `
+    <div><b>FINAL SCORE</b> ${endStats.score}</div>
+    <div><b>BEST SCORE</b> ${registry.bestScore}</div>
+    <div><b>TOASTS CRUSHED</b> ${endStats.kills}</div>
+    <div><b>BIGGEST WAVE</b> ${endStats.bestWave}</div>
+    <div><b>BLASTS LANDED</b> ${endStats.wavesPopped}</div>
+    <div><b>SURVIVAL TIME</b> ${endStats.time} s</div>
+    <div><b>FLAVOR</b> ${PAL.name}</div>
+  `;
+  document.getElementById('endScreen').classList.remove('hidden');
+}
+
+// =============================================================
+// MENU UI
+// =============================================================
+function buildFlavorMenu() {
+  const wrap = document.getElementById('flavors');
+  wrap.innerHTML = '';
+  for (const key of Object.keys(FLAVORS)) {
+    const f = FLAVORS[key];
+    const el = document.createElement('div');
+    el.className = 'flavor' + (key === currentFlavorKey ? ' selected' : '');
+    el.dataset.flavor = key;
+    el.style.borderColor = f.jam;
+    el.innerHTML = `
+      <div class="swatch" style="background:${f.jam};"></div>
+      <div class="name" style="color:${f.jamDk}">${f.name}</div>
+    `;
+    el.addEventListener('click', () => {
+      currentFlavorKey = key;
+      PAL = FLAVORS[key];
+      registry = REG.load();
+      registry.flavor = key;
+      REG.save(registry);
+      paperTexture.cache = null;
+      setRoot();
+      buildFlavorMenu();
+    });
+    wrap.appendChild(el);
+  }
+}
+
+function bindUI() {
+  const playBtn = document.getElementById('playBtn');
+  const replayBtn = document.getElementById('replayBtn');
+  const menuBtn = document.getElementById('menuBtn');
+
+  const launch = (e) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    try { startGame(); }
+    catch(err) { console.error('startGame failed:', err); alert('Erreur au lancement : ' + err.message); }
+  };
+
+  if (playBtn)   playBtn.addEventListener('click', launch);
+  if (replayBtn) replayBtn.addEventListener('click', launch);
+  if (menuBtn)   menuBtn.addEventListener('click', () => {
+    document.getElementById('endScreen').classList.add('hidden');
+    document.getElementById('menu').classList.remove('hidden');
+    state = STATE.MENU;
+  });
+
+  // Fallback : pressing Enter or Space from the menu also starts the game
+  window.addEventListener('keydown', (e) => {
+    if (state === STATE.MENU && (e.key === 'Enter' || e.key === ' ' || e.code === 'Space')) {
+      e.preventDefault();
+      launch();
+    }
+    if (state === STATE.END && (e.key === 'Enter')) {
+      e.preventDefault();
+      launch();
+    }
+  });
+
+  buildFlavorMenu();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bindUI);
+} else {
+  bindUI();
+}
+
+requestAnimationFrame(loop);
+
+// =============================================================
+// roundRect polyfill
+// =============================================================
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+    this.beginPath();
+    this.moveTo(x+r, y);
+    this.lineTo(x+w-r, y);
+    this.quadraticCurveTo(x+w, y, x+w, y+r);
+    this.lineTo(x+w, y+h-r);
+    this.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+    this.lineTo(x+r, y+h);
+    this.quadraticCurveTo(x, y+h, x, y+h-r);
+    this.lineTo(x, y+r);
+    this.quadraticCurveTo(x, y, x+r, y);
+    this.closePath();
+    return this;
+  };
+}
+</script>
+</body>
 </html>
