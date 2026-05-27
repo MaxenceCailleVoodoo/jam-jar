@@ -46,10 +46,16 @@
   body.touch.in-game .touch-controls { display: block; }
   body.touch.portrait .touch-controls { display: none !important; }
   body.touch .hud-tip { display: none; }
+  /* In touch landscape, leave a strip below the canvas to hold the controls
+     outside the play area. */
+  body.touch.in-game:not(.portrait) canvas {
+    max-height: calc(100vh - 130px);
+    max-height: calc(100dvh - 130px);
+  }
   .joystick {
     position: absolute;
-    bottom: 56px;
-    right: 44px;
+    bottom: 14px;
+    right: 18px;
     width: 92px;
     height: 92px;
     border-radius: 50%;
@@ -74,8 +80,8 @@
   .joystick.active .joystick-knob { background: rgba(255,255,255,0.85); }
   .blast-btn {
     position: absolute;
-    bottom: 56px;
-    left: 44px;
+    bottom: 14px;
+    left: 18px;
     width: 76px;
     height: 76px;
     border-radius: 50%;
@@ -1385,19 +1391,14 @@ function updateControlPositions() {
   const joystick = document.getElementById('joystick');
   const wrap = document.getElementById('wrap');
   if (!blastBtn || !joystick || !wrap) return;
-  const r = cvs.getBoundingClientRect();
-  const wr = wrap.getBoundingClientRect();
-  // Generous inset so the thumb has room to push the joystick in any direction
-  // (incl. toward the corners) without the screen edge blocking it.
-  const sideInset = 44;
-  const bottomInset = 56;
-  const leftOff = (r.left - wr.left) + sideInset;
-  const rightOff = (wr.right - r.right) + sideInset;
-  const bottomOff = (wr.bottom - r.bottom) + bottomInset;
-  blastBtn.style.left = leftOff + 'px';
+  // Anchor controls to the viewport (wrap) edges, not the canvas, so they sit
+  // in the strip below the canvas — the CSS shrinks the canvas to make room.
+  const bottomOff = 14;
+  const sideInset = 18;
+  blastBtn.style.left = sideInset + 'px';
   blastBtn.style.right = 'auto';
   blastBtn.style.bottom = bottomOff + 'px';
-  joystick.style.right = rightOff + 'px';
+  joystick.style.right = sideInset + 'px';
   joystick.style.left = 'auto';
   joystick.style.bottom = bottomOff + 'px';
 }
